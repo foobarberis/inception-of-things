@@ -1,0 +1,31 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/trixie64"
+  config.vm.box_version = "13.20260519.1"
+
+
+  config.vm.define "mbernardS" do |server|
+    server.vm.hostname = "mbernardS"
+    server.vm.network "private_network", ip: "192.168.56.110"
+
+    config.vm.provider "virtualbox" do |v|
+      v.name="mbernardS"
+      v.gui = false
+      v.memory = "1024"
+      v.cpus = 1
+    end
+    server.vm.provision "shell", path: "scripts/install_server.sh"
+  end
+  config.vm.define "mbernardSW" do |worker|
+    worker.vm.hostname = "mbernardSW"
+    worker.vm.network "private_network", ip: "192.168.56.111"
+
+    config.vm.provider "virtualbox" do |v|
+      v.name="mbernardSW"
+      v.gui = false
+      v.memory = "1024"
+      v.cpus = 1
+    end
+    worker.vm.provision "shell", path: "scripts/install_worker.sh"
+  end
+end
+
