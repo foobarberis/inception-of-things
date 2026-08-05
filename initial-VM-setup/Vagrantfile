@@ -1,0 +1,35 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/bookworm64"
+
+  config.vm.network "private_network", type: "dhcp"
+  config.vm.network "forwarded_port", guest: 8080, host: 8080
+  config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh", auto_correct: true
+  # autocorrect = will use an other port if 2222 already used
+
+  config.ssh.insert_key = true
+  # generates unique keys to connect to the VM : no risk of another device getting access
+
+  config.vm.provider "virtualbox" do |vb|
+      vb.name = "debian-mbernard-server"
+      vb.memory = "4096"
+      vb.cpus = 4
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
+
+    useradd -m -s /bin/bash -G sudo mbernard || true
+    
+    mkdir -p /home/mbernard/.ssh
+    cat /home/vagrant/.ssh/authorized_keys > /home/mbernard/.ssh/authorized_keys
+    chown -R mbernard:mbernard /home/mbernard/.ssh
+    chmod 700 /home/mbernard/.ssh
+    chmod 600 /home/mbernard/.ssh/authorized_keys
+
+    chown -R mbernard:mbernard /vagrant
+    
+    echo "Provisionning is finished."
+  SHELL
+
+end
+
