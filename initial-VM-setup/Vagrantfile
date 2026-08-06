@@ -1,7 +1,7 @@
 Vagrant.configure("2") do |config|
   config.vm.box = "debian/bookworm64"
 
-  config.vm.network "private_network", type: "dhcp"
+  config.vm.network "private_network", ip: "192.168.57.10"
   config.vm.network "forwarded_port", guest: 8080, host: 8080
   config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh", auto_correct: true
   # autocorrect = will use an other port if 2222 already used
