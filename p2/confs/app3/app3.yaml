@@ -1,0 +1,65 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app3-template
+data:
+  index.html.template: ./index.html
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app3
+  labels:
+    app: app3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app3
+  template:
+    metadata:
+      labels:
+        app: app3
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              sed -e "s/__POD_NAME__/$POD_NAME/g" -e "s/__NODE_NAME__/$NODE_NAME/g" \
+                /etc/nginx-template/index.html.template > /usr/share/nginx/html/index.html
+              nginx -g 'daemon off;'
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: template
+              mountPath: /etc/nginx-template
+            - name: html
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: template
+          configMap:
+            name: app3-template
+        - name: html
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app3-svc
+spec:
+  selector:
+    app: app3
+  ports:
+    - port: 80
+      targetPort: 80
