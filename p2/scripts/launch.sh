@@ -3,8 +3,8 @@ until kubectl cluster-info &> /dev/null; do
   sleep 2
 done
 echo ">>> Cluster Ready! Deploying..."
-vagrant ssh mbernardS2
 
+vagrant ssh mbernardS -- -t << 'EOF'
 kubectl apply -f /home/vagrant/inception-of-things/p2/scripts/vagrant/confs/app1.yaml
 kubectl apply -f /home/vagrant/inception-of-things/p2/scripts/vagrant/confs/app2.yaml
 kubectl apply -f /home/vagrant/inception-of-things/p2/scripts/vagrant/confs/app3.yaml
@@ -20,3 +20,4 @@ kubectl get ingress
 curl -H "Host: app1.com" http://192.168.56.110
 curl -H "Host: app2.com" http://192.168.56.110
 curl http://192.168.56.110
+EOF
