@@ -1,1 +1,5 @@
 .vagrant
+node-token
+*.pem
+*.crt
+*.key
