@@ -4,7 +4,7 @@ until kubectl cluster-info &> /dev/null; do
 done
 echo ">>> Cluster Ready! Deploying..."
 
-vagrant ssh mbernardS -- -t << 'EOF'
+vagrant ssh mbernardS2 -- -t << 'EOF'
 kubectl apply -f /home/vagrant/inception-of-things/p2/scripts/vagrant/confs/app1.yaml
 kubectl apply -f /home/vagrant/inception-of-things/p2/scripts/vagrant/confs/app2.yaml
 kubectl apply -f /home/vagrant/inception-of-things/p2/scripts/vagrant/confs/app3.yaml
