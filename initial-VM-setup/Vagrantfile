@@ -1,5 +1,8 @@
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'qemu'
+
 Vagrant.configure("2") do |config|
-  config.vm.box = "bento/debian-13"
+  config.vm.box = "cloud-image/debian-13"
+  config.vm.box_version = "20260803.2559.0"
 
   config.vm.network "private_network", ip: "192.168.57.10"
   config.vm.network "forwarded_port", guest: 8080, host: 8080
@@ -8,11 +11,16 @@ Vagrant.configure("2") do |config|
 
   config.ssh.insert_key = true
   # generates unique keys to connect to the VM : no risk of another device getting access
+  
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  # disable sync folder to avoir conflict with -virtfs
 
-  config.vm.provider "virtualbox" do |vb|
-      vb.name = "debian-mbernard-server"
-      vb.memory = "4096"
-      vb.cpus = 4
+  config.vm.provider "qemu" do |qe|
+      qe.name = "debian-mbernard-server"
+      qe.memory = "4096"
+      qe.cpus = 4
+      qe.advanced_network = true
+      qe.extra_qemu_args = %w(-cpu host -enable-kvm -virtfs local,path=.,mount_tag=shared,security_model=mapped)
   end
 
   config.vm.provision "shell", inline: <<-SHELL
@@ -25,9 +33,13 @@ Vagrant.configure("2") do |config|
     chown -R mbernard:mbernard /home/mbernard/.ssh
     chmod 700 /home/mbernard/.ssh
     chmod 600 /home/mbernard/.ssh/authorized_keys
+  
+    mkdir -p /vagrant
+    mount -t 9p -o trans=virtio,version=9p2000.L shared /vagrant || echo "Montage 9p échoué, à vérifier"
 
-    chown -R mbernard:mbernard /vagrant
-    
+    if [ -d /vagrant ]; then
+      chown -R mbernard:mbernard /vagrant
+    fi
     echo "Provisionning is finished."
   SHELL
 

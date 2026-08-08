@@ -1,0 +1,13 @@
+qemu-system-x86_64 \
+  -enable-kvm \
+  -cpu host \
+  -m 4096 \
+  -smp 4 \
+  -drive file=debian-mbernard-server.qcow2,if=virtio \
+  -cdrom seed.iso \
+  -netdev user,id=net0,net=192.168.57.0/24,hostfwd=tcp::2222-:22,hostfwd=tcp::8080-:80,hostfwd=tcp::8443-:443 \
+  -device virtio-net-pci,netdev=net0 \
+  -virtfs local,path=.,mount_tag=shared,security_model=mapped \
+  -pidfile /tmp/qemu-mbernard.pid \
+  -monitor telnet:127.0.0.1:4444,server,nowait \
+  -nographic
