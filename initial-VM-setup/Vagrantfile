@@ -1,8 +1,13 @@
 ENV['VAGRANT_DEFAULT_PROVIDER'] = 'qemu'
 
 Vagrant.configure("2") do |config|
+# <<<<<<< HEAD
   config.vm.box = "cloud-image/debian-13"
   config.vm.box_version = "20260803.2559.0"
+# =======
+#   config.vm.box = "bento/debian-13"
+#   # config.vm.box = "debian/bookworm64"
+# >>>>>>> part2-mbernard
 
   config.vm.network "private_network", ip: "192.168.57.10"
   config.vm.network "forwarded_port", guest: 8080, host: 8080
@@ -15,6 +20,7 @@ Vagrant.configure("2") do |config|
   config.vm.synced_folder ".", "/vagrant", disabled: true
   # disable sync folder to avoir conflict with -virtfs
 
+# <<<<<<< HEAD
   config.vm.provider "qemu" do |qe|
       qe.name = "debian-mbernard-server"
       qe.memory = "4096"
@@ -43,5 +49,15 @@ Vagrant.configure("2") do |config|
     echo "Provisionning is finished."
   SHELL
 
+# =======
+#   config.vm.provider "libvirt" do |lv|
+#       lv.name = "debian-mbernard-server"
+#       lv.memory = "4096"
+#       lv.cpus = 4
+#       lv.cpu_mode = "host-passthrough"
+#       # lv.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+#   end
+#   config.vm.provision "shell", path: "./init-install.sh"
+# >>>>>>> part2-mbernard
 end
 

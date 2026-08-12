@@ -1,0 +1,31 @@
+#cloud-config
+users:
+  - name: mbernard
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 YOUR_KEY
+
+chpasswd:
+  expire: false
+
+package_update: true
+packages:
+  - git
+  - qemu-kvm
+  - libvirt-daemon-system
+  - libvirt-clients
+  - bridge-utils
+  - virtinst
+  - vagrant
+
+runcmd:
+  - growpart /dev/vda 1 || true
+  - resize2fs /dev/vda1
+  - mkdir -p /vagrant
+  - mount -t 9p -o trans=virtio,version=9p2000.L shared /vagrant || echo "Mounting 9p failed"
+  - chown -R mbernard:mbernard /vagrant
+  - usermod -aG libvirt mbernard
+  - usermod -aG kvm mbernard
+  - apt-get install -y vagrant-libvirt || echo "vagrant-libvirt plugin install failed, may need manual plugin install"
