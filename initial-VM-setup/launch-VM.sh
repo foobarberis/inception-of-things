@@ -8,7 +8,7 @@ fi
 qemu-system-x86_64 \
   -enable-kvm \
   -cpu host \
-  -m 4096 \
+  -m 8192 \
   -smp 4 \
   -drive file=debian-mother.qcow2,if=virtio \
   -cdrom seed.iso \
