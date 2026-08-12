@@ -13,7 +13,7 @@ chown -R mbernard:mbernard /vagrant
 
 apt-get update
 apt-get install -y git lsb-release curl
-apt-get install -y gnupg software-properties-common  build-essential dkms
+apt-get install -y gnupg build-essential dkms  dkms "linux-headers-$(uname -r)"
 
 curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 
