@@ -14,22 +14,6 @@ Vagrant.configure("2") do |config|
       vb.memory = "4096"
       vb.cpus = 4
   end
-
-  config.vm.provision "shell", inline: <<-SHELL
-    apt-get update
-
-    useradd -m -s /bin/bash -G sudo mbernard || true
-    
-    mkdir -p /home/mbernard/.ssh
-    cat /home/vagrant/.ssh/authorized_keys > /home/mbernard/.ssh/authorized_keys
-    chown -R mbernard:mbernard /home/mbernard/.ssh
-    chmod 700 /home/mbernard/.ssh
-    chmod 600 /home/mbernard/.ssh/authorized_keys
-
-    chown -R mbernard:mbernard /vagrant
-    
-    echo "Provisionning is finished."
-  SHELL
-
+  config.vm.provision "shell", path: "./init-install.sh"
 end
 
