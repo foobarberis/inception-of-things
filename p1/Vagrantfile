@@ -6,9 +6,9 @@ Vagrant.configure("2") do |config|
     server.vm.hostname = "mbernardS"
     server.vm.network "private_network", ip: "192.168.56.110"
 
-    server.vm.provider "virtualbox" do |v|
-      v.name="mbernardS"
-      v.gui = false
+    server.vm.provider "libvirt" do |v|
+      # v.name="mbernardS"
+      # v.gui = false
       v.memory = "1024"
       v.cpus = 1
     end
@@ -18,9 +18,9 @@ Vagrant.configure("2") do |config|
     worker.vm.hostname = "mbernardSW"
     worker.vm.network "private_network", ip: "192.168.56.111"
 
-    worker.vm.provider "virtualbox" do |v|
-      v.name="mbernardSW"
-      v.gui = false
+    worker.vm.provider "libvirt" do |v|
+      # v.name="mbernardSW"
+      # v.gui = false
       v.memory = "1024"
       v.cpus = 1
     end
