@@ -50,3 +50,4 @@ Link : [Hashicorp cloud-image/debian-13: https://portal.cloud.hashicorp.com/vagr
 
 - `kubectl get nodes -o wide` : see the nodes in the server VM
 - `ip addr show <interface_name>` : show the interface wanted
+- `kubectl get all -n kube-system` : shows everything (nodes, podes, etc.)
