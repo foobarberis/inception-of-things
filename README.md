@@ -29,7 +29,7 @@ We can ignore it
 `launch-VM.sh` permits to create the initial VM, it :
 
 - Downloads the iso if not downloaded
-- Set it to 20G
+- Set it to 20G and RAM = 8192G
 - Creates `seed.iso`:
 `xorriso -as genisoimage -output seed.iso -volid cidata -joliet -rock user-data meta-data`
 
@@ -45,3 +45,8 @@ We can ignore it
 
 - Image used : cloud-image/debian-13
 Link : [Hashicorp cloud-image/debian-13: https://portal.cloud.hashicorp.com/vagrant/discover/cloud-image/debian-13]
+
+## Testing commands
+
+- `kubectl get nodes -o wide` : see the nodes in the server VM
+- `ip addr show <interface_name>` : show the interface wanted
