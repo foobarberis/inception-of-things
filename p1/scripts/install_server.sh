@@ -1,3 +1,5 @@
+rm -f /vagrant/node-token
+
 apt-get update
 
 echo "Installing k3s on server."
