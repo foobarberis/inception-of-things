@@ -24,6 +24,15 @@ A warning will show in red :
 "default: chown: cannot access '/vagrant': No such file or directory"
 We can ignore it
 
+## Initial VM
+
+`launch-VM.sh` permits to create the initial VM, it :
+
+- Downloads the iso if not downloaded
+- Set it to 20G
+- Creates `seed.iso`:
+`xorriso -as genisoimage -output seed.iso -volid cidata -joliet -rock user-data meta-data`
+
 ## Vagrant
 
 ### Useful commands

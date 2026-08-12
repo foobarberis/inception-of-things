@@ -29,3 +29,4 @@ runcmd:
   - usermod -aG libvirt mbernard
   - usermod -aG kvm mbernard
   - apt-get install -y vagrant-libvirt || echo "vagrant-libvirt plugin install failed, may need manual plugin install"
+  - vagrant plugin install libvirt
