@@ -42,7 +42,4 @@ kubectl create configmap app3-template --from-file=index.html.template=${CONFS}/
 
 kubectl get pods
 kubectl get ingress
-curl -H "Host: app1.com" http://192.168.56.110
-curl -H "Host: app2.com" http://192.168.56.110
-curl http://192.168.56.110
 echo "Provisionning is finished."

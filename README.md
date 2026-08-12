@@ -51,3 +51,6 @@ Link : [Hashicorp cloud-image/debian-13: https://portal.cloud.hashicorp.com/vagr
 - `kubectl get nodes -o wide` : see the nodes in the server VM
 - `ip addr show <interface_name>` : show the interface wanted
 - `kubectl get all -n kube-system` : shows everything (nodes, podes, etc.)
+- `curl -H "Host: app1.com" http://192.168.56.110` -> test app1
+- `curl -H "Host: app2.com" http://192.168.56.110` -> test app2
+- `curl http://192.168.56.110` -> test app3
