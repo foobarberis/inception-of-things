@@ -7,7 +7,7 @@ echo "Installing k3s on server."
 NODE_INTERFACE=$(ip -o -4 addr show to 192.168.56.110 | awk '{print $2}')
     echo "Cluster interface : $NODE_INTERFACE"
 
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip=192.168.56.110 --flannel-iface=${NODE_INTERFACE} --write-kubeconfig-mode 644" sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip=192.168.56.110 --flannel-iface=${NODE_INTERFACE} --write-kubeconfig-mode 644 --disable traefik --disable servicelb --disable metrics-server --disable local-storage" sh -
 
 echo "Waiting for k3s to start and generate node-token..."
 while [ ! -f /var/lib/rancher/k3s/server/node-token ]; do
