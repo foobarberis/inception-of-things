@@ -56,6 +56,11 @@ kubectl get ingress -o wide
 kubectl describe ingress
 ```
 
+How to test websites from the host :
+
+- `ssh -4 -L 8888:192.168.56.110:80 -p 2222 <you-login>@localhost`
+- `python ./initial-VM-setup/launch_proxy_from_host_for_p2.py`
+
 ## Testing commands
 
 - `kubectl get nodes -o wide` : see the nodes in the server VM
