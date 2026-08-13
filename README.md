@@ -38,6 +38,7 @@ We can ignore it
 ### Useful commands
 
 - `vagrant up` : build and launch the VM
+- `vagrant provision` : launchs the VM forcing to provision again
 - `vagrant halt` : stop gracefully the VM
 - `vagrant destroy -f` : destroy the VM
 
