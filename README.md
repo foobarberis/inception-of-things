@@ -15,14 +15,13 @@ To use qemu for the VM, we need to install :
 
 We need to be in the libvirt group:
 `sudo usermod -aG libvirt $(whoami)`
+To use qemu, we must tell vagrant to use libvirt, else it will use virtualbox.
+Either manually :
+`export VAGRANT_DEFAULT_PROVIDER=libvirt`
+Or written directly on the Vagrantfile :
+`ENV['VAGRANT_DEFAULT_PROVIDER'] = 'libvirt'`
 
-To use qemu, we must tell vagrant to use libvirt, else it wwill use virtualbox:
-`export VAGRANT_DEFAULT_PROVIDER=qemu`
 Only then we can do `vagrant up`.
-
-A warning will show in red :
-"default: chown: cannot access '/vagrant': No such file or directory"
-We can ignore it
 
 ## Initial VM
 
