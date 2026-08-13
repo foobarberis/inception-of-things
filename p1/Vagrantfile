@@ -16,8 +16,6 @@ Vagrant.configure("2") do |config|
       lv.memory = "1024"
       lv.cpus = 1
       lv.cpu_mode = "host-passthrough"
-      lv.graphics_type = "none"
-      lv.video_type = "none"
     end
     server.vm.provision "shell", path: "scripts/install_server.sh"
   end
@@ -28,11 +26,9 @@ Vagrant.configure("2") do |config|
       libvirt__network_name: "p1_network"
 
     worker.vm.provider "libvirt" do |lv|
-      lv.memory = "1024"
+      lv.memory = "512"
       lv.cpus = 1
       lv.cpu_mode = "host-passthrough"
-      lv.graphics_type = "none"
-      lv.video_type = "none"
     end
     worker.vm.provision "shell", path: "scripts/install_worker.sh"
   end
