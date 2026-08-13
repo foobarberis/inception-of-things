@@ -40,6 +40,8 @@ Only then we can do `vagrant up`.
 - `vagrant provision` : launchs the VM forcing to provision again
 - `vagrant halt` : stop gracefully the VM
 - `vagrant destroy -f` : destroy the VM
+Note about `vagrant destroy -f` : we must also erase the node-token file.
+Else, building it will block eternally.
 
 ## Part 1
 
