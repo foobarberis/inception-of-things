@@ -16,6 +16,5 @@ done
 
 cat /var/lib/rancher/k3s/server/node-token > /vagrant/node-token
 chmod 644 /vagrant/node-token
-echo "DEBUG server wrote: $(wc -c < /vagrant/node-token) bytes, sha256=$(sha256sum /vagrant/node-token)"
 
 echo "Provisionning is finished."

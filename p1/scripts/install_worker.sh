@@ -6,7 +6,6 @@ echo "Waiting for token..."
 while [ ! -f /vagrant/node-token ]; do
   sleep 2
 done
-echo "DEBUG worker reads: $(wc -c < /vagrant/node-token) bytes, sha256=$(sha256sum /vagrant/node-token)"
 
 NODE_INTERFACE=$(ip -o -4 addr show to 192.168.56.111 | awk '{print $2}')
     echo "Cluster interface : $NODE_INTERFACE"
