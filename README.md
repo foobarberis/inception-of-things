@@ -46,6 +46,15 @@ We can ignore it
 - Image used : cloud-image/debian-13
 Link : [Hashicorp cloud-image/debian-13: https://portal.cloud.hashicorp.com/vagrant/discover/cloud-image/debian-13]
 
+## Part 2
+
+- Commands to show ingress :
+
+```sh
+kubectl get ingress -o wide
+kubectl describe ingress
+```
+
 ## Testing commands
 
 - `kubectl get nodes -o wide` : see the nodes in the server VM
