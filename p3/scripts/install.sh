@@ -31,14 +31,13 @@ kubectl apply -f "$(dirname "$0")/../confs/argocd.yaml"
 
 echo "Finished setup"
 
-echo "Port-forward appli :"
-echo "  kubectl port-forward svc/wil-playground 8888:8888 -n dev &"
-echo "  curl http://localhost:8888/"
+echo "To Port-forward appli to the host, do :"
+echo "  Inside the VM : kubectl port-forward svc/wil-playground 8888:8888 -n dev &"
+echo "  On the host : curl http://localhost:8888/"
 echo ""
-echo "Mot de passe Argo CD :"
-kubectl get secret argocd-initial-admin-secret -n argocd \
-    -o jsonpath='{.data.password}' | base64 -d
+echo "To get the password, do :"
+echo "  kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
 echo ""
-echo "UI Argo CD :"
-echo "  kubectl port-forward svc/argocd-server 8086:443 -n argocd &"
-echo "  https://localhost:8086  (login: admin)"
+echo "To Port-forward Argo CD to the host, do :"
+echo "  Inside the VM : kubectl port-forward svc/argocd-server 8086:443 -n argocd &"
+echo "  On the host : https://localhost:8086  (login: admin)"
