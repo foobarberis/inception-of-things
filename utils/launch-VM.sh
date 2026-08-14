@@ -12,7 +12,7 @@ qemu-system-x86_64 \
   -smp 4 \
   -drive file=debian-mother.qcow2,if=virtio \
   -cdrom seed.iso \
-  -netdev user,id=net0,net=192.168.57.0/24,hostfwd=tcp::2222-:22,hostfwd=tcp::8888-:8888,hostfwd=tcp::8080-:8080,hostfwd=tcp::8443-:443 \
+  -netdev user,id=net0,net=192.168.57.0/24,hostfwd=tcp::2222-:22,hostfwd=tcp::8888-:8888,hostfwd=tcp::8086-:8086,hostfwd=tcp::8080-:8080,hostfwd=tcp::8443-:443 \
   -device virtio-net-pci,netdev=net0 \
   -virtfs local,path=.,mount_tag=shared,security_model=mapped \
   -pidfile /tmp/qemu-mbernard.pid \
