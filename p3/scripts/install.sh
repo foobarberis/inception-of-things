@@ -15,7 +15,7 @@ fi
 if ! k3d cluster list | grep -q "iot-p3"; then
     k3d cluster create iot-p3 \
     -p "8888:8888@loadbalancer" \
-    -p "8086:80@loadbalancer" \
+    -p "8086:443@loadbalancer" \
     --wait
 fi
 
