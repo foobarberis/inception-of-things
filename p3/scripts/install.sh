@@ -25,10 +25,7 @@ sudo apt install -y -qq \
 
 sudo usermod -aG docker "$USER"
 
-KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
-curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-        -o /usr/local/bin/kubectl
-chmod +x /usr/local/bin/kubectl
+sudo apt-get install -y -qq kubectl
 
 curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
