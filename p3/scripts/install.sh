@@ -1,31 +1,10 @@
 #!/bin/bash
 set -e
 
-# Add Docker's official GPG key:
-sudo apt update -qq
-sudo apt install -qq ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository to Apt sources:
-sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/debian
-Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-
-sudo apt update -qq
-sudo apt install -y -qq \
-        docker-ce docker-ce-cli containerd.io \
-        docker-buildx-plugin docker-compose-plugin
-
-newgrp docker
-sudo usermod -aG docker "$USER"
-
+if ! command -v docker &>/dev/null; then
+    "Execute docker.sh first, then disconnect and reconnect in SHH"
+    exit
+fi
 sudo apt-get install -y -qq kubectl
 
 curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
@@ -35,7 +14,7 @@ k3d cluster create iot-p3
 export KUBECONFIG="$HOME/.kube/config"
 
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl create namespace dev    --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace dev --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl apply -n argocd \
     -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
