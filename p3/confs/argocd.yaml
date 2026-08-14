@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://@github.com:melobern/mbernard-iot
+    repoURL: https://github.com/melobern/mbernard-iot
     targetRevision: HEAD
     path: .
   destination:
