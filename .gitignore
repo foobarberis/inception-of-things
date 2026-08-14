@@ -3,3 +3,6 @@ node-token
 *.pem
 *.crt
 *.key
+user-data
+debian-mother.qcow2
+seed.iso
