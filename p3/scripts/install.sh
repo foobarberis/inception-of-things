@@ -5,11 +5,16 @@ if ! command -v docker &>/dev/null; then
     "Execute docker.sh first, then disconnect and reconnect in SHH"
     exit
 fi
+
 sudo apt-get install -y -qq kubectl
 
-curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+if ! command -v k3d &>/dev/null; then
+    curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+fi
 
-k3d cluster create iot-p3
+if ! k3d cluster list | grep -q "iot-p3"; then
+    k3d cluster create iot-p3
+fi
 
 export KUBECONFIG="$HOME/.kube/config"
 
