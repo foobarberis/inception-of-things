@@ -23,6 +23,7 @@ sudo apt install -y -qq \
         docker-ce docker-ce-cli containerd.io \
         docker-buildx-plugin docker-compose-plugin
 
+newgrp docker
 sudo usermod -aG docker "$USER"
 
 sudo apt-get install -y -qq kubectl
