@@ -1,28 +1,34 @@
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'libvirt'
+
 Vagrant.configure("2") do |config|
-  config.vm.box = "bento/debian-13"
-  config.vm.box_version = "202510.26.0"
+  config.vm.box = "cloud-image/debian-13"
+  config.vm.box_version = "20260803.2559.0"
+
+  config.vm.synced_folder ".", "/vagrant", type: "nfs", nfs_udp: false, nfs_version: 4
 
   config.vm.define "mbernardS" do |server|
     server.vm.hostname = "mbernardS"
-    server.vm.network "private_network", ip: "192.168.56.110"
+    server.vm.network "private_network",
+      ip: "192.168.56.110",
+      libvirt__network_name: "p1_network"
 
-    server.vm.provider "virtualbox" do |v|
-      v.name="mbernardS"
-      v.gui = false
-      v.memory = "1024"
-      v.cpus = 1
+    server.vm.provider "libvirt" do |lv|
+      lv.memory = "1024"
+      lv.cpus = 1
+      lv.cpu_mode = "host-passthrough"
     end
     server.vm.provision "shell", path: "scripts/install_server.sh"
   end
   config.vm.define "mbernardSW" do |worker|
     worker.vm.hostname = "mbernardSW"
-    worker.vm.network "private_network", ip: "192.168.56.111"
+    worker.vm.network "private_network",
+      ip: "192.168.56.111",
+      libvirt__network_name: "p1_network"
 
-    worker.vm.provider "virtualbox" do |v|
-      v.name="mbernardSW"
-      v.gui = false
-      v.memory = "1024"
-      v.cpus = 1
+    worker.vm.provider "libvirt" do |lv|
+      lv.memory = "512"
+      lv.cpus = 1
+      lv.cpu_mode = "host-passthrough"
     end
     worker.vm.provision "shell", path: "scripts/install_worker.sh"
   end
