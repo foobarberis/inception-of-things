@@ -25,8 +25,6 @@ sudo apt install -y -qq \
 
 sudo usermod -aG docker "$USER"
 
-curl -fsSL https://get.docker.com | sh
-
 KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
 curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
         -o /usr/local/bin/kubectl
