@@ -15,7 +15,7 @@ fi
 if ! k3d cluster list | grep -q "iot-p3"; then
     k3d cluster create iot-p3 \
     -p "8888:8888@loadbalancer" \
-    -p "8086:80@loadbalancer" \
+    -p "8086:443@loadbalancer" \
     --wait
 fi
 
@@ -32,6 +32,11 @@ kubectl wait --for=condition=available \
 
 kubectl patch configmap argocd-cmd-params-cm -n argocd \
     --type merge -p '{"data": {"server.insecure": "true"}}'
+
+kubectl patch svc argocd-server -n argocd \
+  --type merge \
+  -p '{"spec":{"type":"ClusterIP"}}'
+
 kubectl rollout restart deployment argocd-server -n argocd
 kubectl rollout status deployment argocd-server -n argocd
 
