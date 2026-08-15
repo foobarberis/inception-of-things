@@ -44,7 +44,7 @@ kubectl apply -f "$(dirname "$0")/../confs/argocd.yaml"
 
 echo "Finished setup"
 echo "App    : curl http://localhost:8888/"
-echo "ArgoCD : http://localhost:8086  (login: admin)"
+echo "ArgoCD : https://localhost:8086  (login: admin)"
 echo "To get the password, do :"
 echo "  kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
 echo ""
