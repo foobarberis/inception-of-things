@@ -162,18 +162,18 @@ provisioner. The worker waits for the server's token before joining K3s.
 
 ### Validate
 
-```sh
-./scripts/validate.sh
-```
-
-The validator checks that both guests are running with libvirt, confirms
-passwordless Vagrant SSH, verifies hostnames, addresses and K3s services, waits
-for two `Ready` Kubernetes nodes, and prints the node and pod lists. It exits
-non-zero on failure. The default wait is five minutes; override it if needed:
+The script resolves its own `p1` directory, so it can be launched from any
+working directory in the outer VM:
 
 ```sh
-P1_VALIDATE_TIMEOUT_SECONDS=60 ./scripts/validate.sh
+bash ~/inception-of-things/p1/scripts/validate.sh
 ```
+
+It is a display-oriented checklist: it prints the Vagrant state, each guest's
+hostname, private address and K3s service state, followed by the node and
+system-pod lists. Inspect the output for both running guests, both expected IP
+addresses, active services, and two `Ready` nodes. It does not poll for
+readiness, so run it after provisioning has completed.
 
 Useful interactive checks:
 
@@ -266,16 +266,16 @@ installs K3s, waits for Traefik, and deploys the applications. Subsequent
 
 ### Test from the outer VM
 
-The Part 2 validator runs the Vagrant, K3s, Ingress and routing checks. From
-`~/inception-of-things/p2` in the outer VM, run:
+The Part 2 checklist resolves its own `p2` directory, so it can be launched
+from any working directory in the outer VM:
 
 ```sh
-bash scripts/validate.sh
+bash ~/inception-of-things/p2/scripts/validate.sh
 ```
 
 It displays the VM state, hostname and private address, K3s node, deployments,
-pods, services, Ingress rules, and the three expected page markers. A passing
-run shows one `Ready` node, app1 and app3 at `1/1`, app2 at `3/3`, and:
+pods, services, Ingress rules, and the three expected page markers. Inspect the
+output for one `Ready` node, app1 and app3 at `1/1`, app2 at `3/3`, and:
 
 ```text
 Hello from app1.
