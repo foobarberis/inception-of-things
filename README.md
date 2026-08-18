@@ -63,21 +63,32 @@ this before it creates VM state.
 
 ### Start the outer VM (physical host)
 
-From the repository root:
+For a new VM, pass the public half of the personal SSH key registered for your
+account (shown here with the default Ed25519 key):
+
+```sh
+SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh
+```
+
+The script downloads a pinned Debian image to `~/goinfre`, creates a 20 GB
+copy-on-write disk and cloud-init seed under `~/goinfre/iot-vm`, and authorizes
+that public key for `mbernard`. It never generates or stores a private key.
+Later launches reuse the state and do not need `SSH_KEY`:
 
 ```sh
 ./setup/launch-vm.sh
 ```
 
-On first launch, the script downloads a pinned Debian image to `~/goinfre`,
-creates a 20 GB copy-on-write disk, SSH key, and cloud-init seed under
-`~/goinfre/iot-vm`, then starts QEMU. Later launches reuse that state. The QEMU
-console stays attached to this terminal.
+The QEMU console stays attached to this terminal. If the VM state was created
+with the previous generated-key setup, remove `~/goinfre/iot-vm` after stopping
+QEMU and create it again with `SSH_KEY`. Cloud-init does not replace the
+existing VM's authorized key.
 
-In a second **physical-host** terminal, connect to the outer VM:
+In a second **physical-host** terminal, connect with the private counterpart
+of `SSH_KEY` (shown here as the default Ed25519 key):
 
 ```sh
-ssh -i "$HOME/goinfre/iot-vm/id_ed25519" -p 2222 \
+ssh -i "$HOME/.ssh/id_ed25519" -p 2222 \
   -o IdentitiesOnly=yes \
   -o UserKnownHostsFile=/dev/null \
   -o StrictHostKeyChecking=no \
@@ -107,9 +118,9 @@ git clone https://github.com/foobarberis/inception-of-things.git ~/inception-of-
 | Action | Command | Effect |
 | --- | --- | --- |
 | Graceful stop (**outer VM**) | `sudo poweroff` | Stops the guest and releases its CPU/RAM allocation. |
-| Start or restart (**physical host**) | `./setup/launch-vm.sh` | Reuses the disk, key, and cloud-init state. |
+| Start or restart (**physical host**) | `./setup/launch-vm.sh` | Reuses the disk and cloud-init state. |
 | Force-stop (**QEMU console**) | `Ctrl-a`, then `x` | Immediately quits QEMU; use only if graceful shutdown is unavailable. |
-| Destroy VM state (**physical host**, after QEMU stops) | `rm -rf "$HOME/goinfre/iot-vm"` | Removes the overlay disk, seed, and SSH key. The base image remains cached. |
+| Destroy VM state (**physical host**, after QEMU stops) | `rm -rf "$HOME/goinfre/iot-vm"` | Removes the overlay disk and cloud-init seed. The base image remains cached. |
 | Remove the cached base image too (**physical host**) | `rm -f "$HOME"/goinfre/debian-13-generic-amd64-*.qcow2` | Frees the image cache; the next launch downloads it again. |
 
 Closing SSH only disconnects the client. Halt nested Vagrant guests before
@@ -260,18 +271,18 @@ existing host mapping for port `8888`.
 ssh -4 -N -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:18088:192.168.56.110:80 \
   -p 2222 \
-  -i "$HOME/goinfre/iot-vm/id_ed25519" \
+  -i "$HOME/.ssh/id_ed25519" \
   -o IdentitiesOnly=yes \
   -o UserKnownHostsFile=/dev/null \
   -o StrictHostKeyChecking=no \
   mbernard@localhost
 ```
 
-In the second terminal, from a checkout containing `utils`, start the local
+In the second terminal, from this repository's root, start the local
 header-injecting proxy:
 
 ```sh
-python3 utils/launch_proxy_from_host_for_p2.py
+python3 p2/scripts/proxy.py
 ```
 
 | Browser URL | Injected `Host` header | Expected application |

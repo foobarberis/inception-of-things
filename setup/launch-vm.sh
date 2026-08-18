@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Pin the reusable Debian base image; never modify it after download.
-# The writable disk and all generated secrets live outside the repository.
+# The writable disk and generated cloud-init state live outside the repository.
 IMAGE_RELEASE="20260810-2566"
 IMAGE_NAME="debian-13-generic-amd64-${IMAGE_RELEASE}.qcow2"
 IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/${IMAGE_RELEASE}/${IMAGE_NAME}"
@@ -16,7 +16,7 @@ VM_DIR="$GOINFRE_DIR/iot-vm"
 BASE_IMAGE="$GOINFRE_DIR/$IMAGE_NAME"
 VM_DISK="$VM_DIR/disk.qcow2"
 SEED_ISO="$VM_DIR/seed.iso"
-SSH_KEY="$VM_DIR/id_ed25519"
+SSH_PUBLIC_KEY="${SSH_KEY:-}"
 
 # Fail before creating state when a host-side prerequisite is missing.
 require_command() {
@@ -28,7 +28,7 @@ require_command() {
     fi
 }
 
-for command in curl qemu-img qemu-system-x86_64 ssh ssh-keygen xorriso; do
+for command in curl qemu-img qemu-system-x86_64 ssh xorriso; do
     require_command "$command"
 done
 
@@ -45,6 +45,20 @@ if [[ ! -w "$GOINFRE_DIR" ]]; then
     exit 1
 fi
 
+# A new VM needs the caller's existing public key. Existing VM state already
+# contains its rendered cloud-init seed and can be started without SSH_KEY.
+if [[ ! -e "$VM_DIR" ]]; then
+    if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+        echo "SSH_KEY must contain a public SSH key when creating VM state." >&2
+        echo 'Example: SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh' >&2
+        exit 1
+    fi
+    if [[ "$SSH_PUBLIC_KEY" == *$'\n'* || "$SSH_PUBLIC_KEY" == *$'\r'* ]]; then
+        echo "SSH_KEY must be a single-line public SSH key." >&2
+        exit 1
+    fi
+fi
+
 # Download atomically so an interrupted transfer never becomes the cached image.
 if [[ ! -s "$BASE_IMAGE" ]]; then
     echo "Downloading Debian 13 base image..."
@@ -52,18 +66,20 @@ if [[ ! -s "$BASE_IMAGE" ]]; then
     mv -- "$BASE_IMAGE.part" "$BASE_IMAGE"
 fi
 
-# A missing state directory means a fresh VM identity, disk, and cloud-init seed.
+# A missing state directory means a fresh disk and cloud-init seed.
 if [[ ! -e "$VM_DIR" ]]; then
     umask 077
     mkdir -m 700 "$VM_DIR"
 
-    # Use a VM-specific key instead of exposing the host's regular SSH key.
-    ssh-keygen -q -t ed25519 -N '' -C iot-vm -f "$SSH_KEY"
-
-    # Render the generated public key into private cloud-init data.
-    public_key="$(<"$SSH_KEY.pub")"
-    sed -e "s|__SSH_PUBLIC_KEY__|$public_key|g" \
-        "$SCRIPT_DIR/cloud-init/user-data.template" > "$VM_DIR/user-data"
+    # Render the caller's public key without interpreting shell or sed syntax in it.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == *"__SSH_PUBLIC_KEY__"* ]]; then
+            printf '%s%s%s\n' "${line%%__SSH_PUBLIC_KEY__*}" "$SSH_PUBLIC_KEY" \
+                "${line#*__SSH_PUBLIC_KEY__}"
+        else
+            printf '%s\n' "$line"
+        fi
+    done < "$SCRIPT_DIR/cloud-init/user-data.template" > "$VM_DIR/user-data"
     cp "$SCRIPT_DIR/cloud-init/meta-data.template" "$VM_DIR/meta-data"
 
     # Package the rendered cloud-init files as the NoCloud seed ISO.
@@ -76,11 +92,9 @@ if [[ ! -e "$VM_DIR" ]]; then
     # Make a 20 GB copy-on-write disk; the cached image remains untouched.
     qemu-img create -q -f qcow2 -F qcow2 -b "$BASE_IMAGE" "$VM_DISK"
     qemu-img resize -q "$VM_DISK" 20G
-    chmod 600 "$SSH_KEY"
     echo "Created VM state: $VM_DIR"
 elif [[ ! -d "$VM_DIR" || ! -f "$VM_DISK" || ! -f "$SEED_ISO" || \
-        ! -f "$SSH_KEY" || ! -f "$SSH_KEY.pub" || ! -f "$VM_DIR/user-data" || \
-        ! -f "$VM_DIR/meta-data" ]]; then
+        ! -f "$VM_DIR/user-data" || ! -f "$VM_DIR/meta-data" ]]; then
     # Do not silently mix partial state with a new seed or key.
     echo "VM state is incomplete. Remove $VM_DIR and run this script again." >&2
     exit 1
