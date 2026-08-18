@@ -1,70 +1,227 @@
 # Inception of Things
 
-A 42 system administration project introducing Kubernetes through K3s, K3d, Vagrant, and Argo CD.
+## Table of contents
 
-The project covers virtual machine provisioning, application deployment and routing, and GitOps-based continuous delivery.
+- [Introduction](#introduction)
+- [Setup](#setup)
+- [Part 1](#part-1)
+- [Part 2](#part-2)
+- [Part 3](#part-3)
 
-## Requirements
+## Introduction
 
-To use qemu for the VM, we need to install :
+Inception of Things is a 42 system-administration project that progressively
+introduces virtual-machine provisioning, Kubernetes, networking, and GitOps.
 
-- Packets : `sudo apt install libvirt-daemon-system libvirt-dev qemu-system-kvm vagrant-libvirt`
-- the plugin `vagrant-qemu` :
+- **Part 1** creates a two-node K3s cluster with Vagrant.
+- **Part 2** runs three applications in K3s and routes requests by `Host`
+  header.
+- **Part 3** uses K3d and Argo CD to deploy an application through GitOps.
 
-`vagrant plugin install vagrant-libvirt`
+All parts run inside one outer Debian VM. QEMU/KVM isolates that VM from the
+host; cloud-init prepares it on first boot. Parts 1 and 2 use
+Vagrant/libvirt to create further nested guests, while Part 3 uses Docker,
+K3d, and Argo CD inside the same outer VM.
 
-We need to be in the libvirt group:
-`sudo usermod -aG libvirt $(whoami)`
-To use qemu, we must tell vagrant to use libvirt, else it will use virtualbox.
-Either manually :
-`export VAGRANT_DEFAULT_PROVIDER=libvirt`
-Or written directly on the Vagrantfile :
-`ENV['VAGRANT_DEFAULT_PROVIDER'] = 'libvirt'`
+## Setup
 
-Only then we can do `vagrant up`.
+### Architecture and tools
 
-## Initial VM
+```text
+Host machine
+└── QEMU/KVM
+    └── outer Debian VM: iot-vm (8 GiB RAM, 4 vCPUs)
+        ├── cloud-init: first-boot user and package setup
+        ├── ~/inception-of-things: local project clone
+        ├── Part 1 and Part 2: Vagrant + libvirt guests
+        └── Part 3: Docker + K3d + Argo CD
+```
 
-`launch-VM.sh` permits to create the initial VM, it :
+| Tool | Role |
+| --- | --- |
+| QEMU/KVM | Runs the isolated outer Debian VM and provides hardware-accelerated nested virtualization. |
+| cloud-init | Creates `mbernard`, installs the outer VM dependencies, and grants `kvm`/`libvirt` access on first boot. |
+| Git | Places the project on the outer VM's local filesystem. |
+| Vagrant/libvirt | Used by Parts 1 and 2 to define and manage reproducible nested VMs. |
+| Docker, K3d, Argo CD | Used by Part 3; its workflow is documented later. |
 
-- Downloads the iso if not downloaded
-- Set it to 20G and RAM = 8192G
-- Creates `seed.iso`:
-`xorriso -as genisoimage -output seed.iso -volid cidata -joliet -rock user-data meta-data`
+### Host prerequisites
 
-## Vagrant
+The host needs x86-64 KVM access, QEMU, curl, xorriso, and OpenSSH. On a
+Debian-based host:
 
-### Useful commands
+```sh
+sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client
+```
 
-- `vagrant up` : build and launch the VM
-- `vagrant provision` : launchs the VM forcing to provision again
-- `vagrant halt` : stop gracefully the VM
-- `vagrant destroy -f` : destroy the VM
+`/dev/kvm` must be readable and writable by the host user. The launcher checks
+this before creating VM state.
+
+### Start the outer VM
+
+All commands in this subsection run on the **host**.
+
+From the repository root:
+
+```sh
+./setup/launch-vm.sh
+```
+
+On first launch, the script downloads a pinned Debian base image into
+`~/goinfre`, creates a 20 GB copy-on-write disk and dedicated SSH key under
+`~/goinfre/iot-vm`, renders a cloud-init seed, and starts QEMU. Later runs
+reuse that state and simply restart the same outer VM.
+
+The QEMU console remains attached to the terminal. Use a second terminal to
+connect to the outer VM:
+
+```sh
+ssh -i "$HOME/goinfre/iot-vm/id_ed25519" -p 2222 \
+  -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile=/dev/null \
+  -o StrictHostKeyChecking=no \
+  mbernard@localhost
+```
+
+Inside the outer VM, wait for first-boot installation to finish:
+
+```sh
+cloud-init status --wait
+```
+
+Cloud-init adds `mbernard` to the `kvm` and `libvirt` groups. If the SSH session
+was opened before that completed, exit and reconnect before using Vagrant.
+
+### Put the project on the outer VM
+
+Clone the repository **inside** the outer VM, on its local disk:
+
+```sh
+git clone https://github.com/foobarberis/inception-of-things.git ~/inception-of-things
+```
+
+### Stop, restart, and destroy the outer VM
+
+| Action | Command | Effect |
+| --- | --- | --- |
+| Stop gracefully | Inside the outer VM: `sudo poweroff` | Stops the guest and releases the outer VM's CPU/RAM allocation. |
+| Start or restart | On the host: `./setup/launch-vm.sh` | Reuses the existing disk, key, and cloud-init state. |
+| Force-stop | At the QEMU console: `Ctrl-a`, then `x` | Immediately quits QEMU; use only if graceful shutdown is unavailable. |
+| Destroy VM state | On the host, after QEMU has stopped: `rm -rf "$HOME/goinfre/iot-vm"` | Removes the overlay disk, seed, and SSH key. The cached base image remains. |
+| Remove the cached base image too | On the host: `rm -f "$HOME"/goinfre/debian-13-generic-amd64-*.qcow2` | Frees the base-image cache; the next start downloads it again. |
+
+Closing an SSH session only disconnects the client; it does **not** stop the
+outer VM. Halt nested Vagrant guests before powering off the outer VM when you
+want a graceful shutdown of the whole lab.
 
 ## Part 1
 
-- Image used : cloud-image/debian-13
-Link : [Hashicorp cloud-image/debian-13: https://portal.cloud.hashicorp.com/vagrant/discover/cloud-image/debian-13]
+### Architecture
+
+Part 1 uses the `cloud-image/debian-13` Vagrant box and the libvirt provider to
+build a two-node K3s cluster.
+
+```text
+outer VM: ~/inception-of-things/p1
+├── NFS export
+│   └── /vagrant in both nested guests
+└── libvirt network: p1_network (192.168.56.0/24)
+    ├── mbernardS   (1 vCPU, 1024 MiB, 192.168.56.110)
+    │   └── K3s server: control plane and kubectl
+    └── mbernardSW  (1 vCPU, 512 MiB, 192.168.56.111)
+        └── K3s agent: worker node
+```
+
+The NFS share is the outer VM's local `p1` directory. The server writes its
+K3s join token to `/vagrant/node-token`; the worker reads that same file and
+joins the cluster. 
+
+| Tool | Role in Part 1 |
+| --- | --- |
+| Vagrant | Reads `p1/Vagrantfile`, provisions both guests, and provides passwordless `vagrant ssh` access. |
+| libvirt/QEMU | Runs the nested Debian guests and the `p1_network` private network. |
+| NFS | Makes the outer VM's local `p1` directory available at `/vagrant` in both guests. |
+| K3s | Runs the Kubernetes control plane on `mbernardS` and the agent on `mbernardSW`. |
+| kubectl | Inspects the K3s cluster from the server. |
+
+### Start and provision
+
+Run these commands **inside the outer VM**:
+
+```sh
+cd ~/inception-of-things/p1
+vagrant up --provider=libvirt
+```
+
+`Vagrantfile` already sets libvirt as its default provider, so `vagrant up`
+also works. The explicit provider flag makes the intended provider clear.
+
+On first use, Vagrant downloads the box, creates both guests, mounts the local
+`p1` directory over NFS, runs the server provisioner, and then runs the worker
+provisioner. The worker waits for the server's token before joining K3s.
+
+### Validate
+
+```sh
+./scripts/validate.sh
+```
+
+The validator checks that both guests are running with libvirt, confirms
+passwordless Vagrant SSH, verifies hostnames, addresses and K3s services, waits
+for two `Ready` Kubernetes nodes, and prints the node and pod lists. It exits
+non-zero on failure. The default wait is five minutes; override it if needed:
+
+```sh
+P1_VALIDATE_TIMEOUT_SECONDS=60 ./scripts/validate.sh
+```
+
+Useful interactive checks:
+
+```sh
+vagrant status
+vagrant ssh mbernardS
+vagrant ssh mbernardSW
+vagrant ssh mbernardS -c 'kubectl get nodes -o wide'
+```
+
+The expected node result contains two `Ready` nodes. Kubernetes normalizes the
+node names to lowercase (`mbernards` and `mbernardsw`):
+
+```text
+NAME         STATUS   ROLES           INTERNAL-IP
+mbernards    Ready    control-plane   192.168.56.110
+mbernardsw   Ready    <none>          192.168.56.111
+```
+
+### Stop, restart, and destroy
+
+Run these commands from `~/inception-of-things/p1` inside the outer VM:
+
+| Action | Command | Effect |
+| --- | --- | --- |
+| Show state | `vagrant status` | Shows both guest states and their provider. |
+| Stop both guests | `vagrant halt` | Gracefully stops nested guests and frees their CPU/RAM; their disks and configuration remain. |
+| Restart halted guests | `vagrant up --provider=libvirt` | Starts the existing guests without re-running provisioning. |
+| Re-run provisioning | `vagrant provision` | Re-runs the installers; use deliberately, not as a normal restart. |
+| Destroy both guests | `vagrant destroy -f` | Deletes the nested libvirt guests and their disks. |
+| Remove the old join token after destruction | `rm -f node-token` | Removes the ignored shared token before a clean manual retry. |
+
+For a clean Part 1 rebuild:
+
+```sh
+vagrant destroy -f
+rm -f node-token
+vagrant up --provider=libvirt
+./scripts/validate.sh
+```
+
+Destroying Part 1 frees nested-guest resources. To also free the outer VM's
+8 GiB allocation, halt or power off the outer VM as described in [Setup](#setup).
 
 ## Part 2
 
-- Commands to show ingress :
+> Documentation for Part 2 will be added later.
 
-```sh
-kubectl get ingress -o wide
-kubectl describe ingress
-```
+## Part 3
 
-How to test websites from the host :
-
-- `ssh -4 -L 8888:192.168.56.110:80 -p 2222 <you-login>@localhost`
-- `python ./initial-VM-setup/launch_proxy_from_host_for_p2.py`
-
-## Testing commands
-
-- `kubectl get nodes -o wide` : see the nodes in the server VM
-- `ip addr show <interface_name>` : show the interface wanted
-- `kubectl get all -n kube-system` : shows everything (nodes, podes, etc.)
-- `curl -H "Host: app1.com" http://192.168.56.110` -> test app1
-- `curl -H "Host: app2.com" http://192.168.56.110` -> test app2
-- `curl http://192.168.56.110` -> test app3
+> Documentation for Part 3 will be added later.
