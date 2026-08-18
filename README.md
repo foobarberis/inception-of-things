@@ -21,31 +21,55 @@ Debian VM named `iot-vm`.
 
 ## Stack Overview
 
+Think of the project as a set of machines inside machines. QEMU/KVM creates one
+large Debian VM. Parts 1 and 2 create smaller VMs inside it; Part 3 uses Docker
+containers inside it instead.
+
 ```text
 Physical host
-└── QEMU/KVM
-    └── outer Debian VM: iot-vm
-        ├── cloud-init: first-boot user, packages, and groups
-        ├── Parts 1/2: Vagrant/libvirt → nested VMs → K3s
-        │                              └── Part 2: Traefik → app1/app2/app3
-        └── Part 3: Docker → K3d (K3s)
-                              ├── Traefik → Argo CD ingress
-                              └── Argo CD → dev workload
+└── QEMU/KVM → outer Debian VM (`iot-vm`)
+    ├── cloud-init prepares the VM on its first boot
+    ├── Parts 1/2: Vagrant/libvirt → nested VMs → K3s
+    │                              └── Part 2: Traefik → app1/app2/app3
+    └── Part 3: Docker → K3d → K3s
+                              ├── Traefik → Argo CD web page
+                              └── Argo CD → application
 
-GitHub:    melobern/mbernard-iot ──→ Argo CD Application ──→ Kubernetes manifests
-Docker Hub: wil42/playground:v1|v2 ────────────────────────→ Part 3 workload image
+GitHub repository ──→ Argo CD ──→ application settings in Kubernetes
+Docker Hub image ─────────────────→ Part 3 application
 ```
 
-QEMU/KVM isolates and accelerates the outer VM; cloud-init creates `mbernard`
-and installs its nested-virtualization prerequisites on first boot. Parts 1 and
-2 use Vagrant to define libvirt-managed nested guests, where K3s runs directly.
-Part 3 has no nested Vagrant guests: Docker hosts K3d, which runs K3s in
-containers. `kubectl` is the CLI used to inspect each K3s cluster.
+### A few Kubernetes words
 
-Traefik is the K3s ingress controller used for Part 2 routing and the Part 3
-Argo CD ingress. In Part 3, Argo CD watches the GitHub configuration repository
-and reconciles its manifests; the deployed application image is pulled from
-Docker Hub.
+Kubernetes is a system for running and keeping containers alive across one or
+more machines, called a cluster. You tell it what you want in a YAML file, such
+as “run three copies of this application,” and it keeps trying to make that
+true. A **Deployment** describes those copies; a **Pod** is one running copy;
+and a **Service** gives the copies one stable internal address.
+
+An **Ingress** is a web-routing rule: it says which Service should receive a
+request for a hostname or URL path. It needs a program to apply the rule.
+Traefik is that program in this project; in Part 2 it sends `app1.com`,
+`app2.com`, and other hosts to the right application.
+
+K3s is the lightweight version of Kubernetes that actually runs the cluster.
+K3d is a helper that runs K3s inside Docker containers. In short: Parts 1 and
+2 run K3s in nested VMs, while Part 3 runs K3s in Docker through K3d.
+
+| Tool | Plain-language role |
+| --- | --- |
+| QEMU/KVM | QEMU creates the outer Debian virtual machine; KVM lets it run quickly using the computer's virtualization support. |
+| cloud-init | A first-start setup file. It creates `mbernard`, installs packages, and grants the permissions needed for nested VMs. |
+| Vagrant | A repeatable recipe and command-line tool for creating the small VMs used in Parts 1 and 2. |
+| libvirt | The VM engine Vagrant asks to create, network, start, and stop those small VMs. |
+| K3s | The small, lightweight Kubernetes installation that runs the applications. |
+| Docker | The container engine used in Part 3; it runs K3d's containers. |
+| K3d | The bridge between Docker and K3s: it creates a K3s cluster from Docker containers. |
+| kubectl | The command-line remote control for asking Kubernetes what is running and changing it. |
+| Traefik | The web front door. It reads Ingress rules and sends browser requests to the right application. |
+| Argo CD | A Git watcher for Part 3. It notices changes in GitHub and updates Kubernetes to match. |
+| GitHub | Stores the Part 3 application settings that Argo CD watches. |
+| Docker Hub | Stores the ready-made Part 3 application images (`wil42/playground:v1` and `v2`). |
 
 ## Setup
 
