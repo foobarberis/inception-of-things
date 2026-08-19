@@ -84,31 +84,22 @@ kubectl patch svc argocd-server -n "$ARGOCD_NAMESPACE" \
 kubectl rollout restart deployment argocd-server -n "$ARGOCD_NAMESPACE"
 kubectl rollout status  deployment argocd-server -n "$ARGOCD_NAMESPACE"
 
-# Redis
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm upgrade --install gitlab-redis bitnami/redis \
-    --namespace "${GITLAB_NAMESPACE}" \
-    --set auth.enabled=false \
-    --set architecture=standalone \
-    --wait --timeout 180s
-
-# PostgreSQL
-helm upgrade --install gitlab-postgresql bitnami/postgresql \
-    --namespace "${GITLAB_NAMESPACE}" \
-    --set auth.postgresPassword=gitlab \
-    --set auth.database=gitlabhq_production \
-    --wait --timeout 180s
-
 # ---------- GitLab via Helm ----------
 
 helm repo add gitlab https://charts.gitlab.io/ 2>/dev/null || helm repo update
 helm repo update
 
-GITLAB_CHART_VERSION=$(helm search repo gitlab/gitlab --output json \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
-echo "Chart GitLab détecté : ${GITLAB_CHART_VERSION}"
-echo "AppVersion            : $(helm show chart gitlab/gitlab \
-    --version "${GITLAB_CHART_VERSION}" | grep appVersion | awk '{print $2}')"
+# On épingle à la dernière version 8.x : Redis/PostgreSQL/MinIO bundlés,
+# pas besoin d'object storage externe (supprimé en 9.x+)
+GITLAB_CHART_VERSION=$(helm search repo gitlab/gitlab --versions --output json \
+    | python3 -c "
+import sys, json
+charts = json.load(sys.stdin)
+v8 = [c for c in charts if c['version'].startswith('8.')]
+print(v8[0]['version'])
+")
+echo "Chart GitLab épinglé : ${GITLAB_CHART_VERSION}"
+echo "AppVersion : $(helm show chart gitlab/gitlab --version ${GITLAB_CHART_VERSION} | grep appVersion | awk '{print $2}')" 
 
 helm upgrade --install gitlab gitlab/gitlab \
     --version "${GITLAB_CHART_VERSION}" \
@@ -246,3 +237,6 @@ echo "  kubectl get secret argocd-initial-admin-secret \
 echo ""
 echo "Mot de passe GitLab root : ${GITLAB_ROOT_PASSWORD}"
 echo ""
+echo "Pour changer la version de l'app :"
+echo "  Modifier deployment.yaml (v1→v2), commit+push sur le GitLab local"
+echo "  Argo CD détecte et redéploie automatiquement."

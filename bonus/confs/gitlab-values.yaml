@@ -16,17 +16,6 @@ global:
         display:
           name: Gitlab
           email: gitlab@gitlab.local
-  psql:
-    host: gitlab-postgresql.gitlab.svc.cluster.local
-    password:
-      secret: gitlab-postgresql
-      key: postgres-password
-  redis:
-    host: gitlab-redis-master.gitlab.svc.cluster.local
-    auth:
-      enabled: false
-      
-
 
 certmanager-issuer:
   email: gitlab@gitlab.local
@@ -45,6 +34,12 @@ prometheus:
 
 grafana:
   enabled: false
+
+postgresql:
+  install: true
+
+redis:
+  install: true
 
 minio:
   install: true
