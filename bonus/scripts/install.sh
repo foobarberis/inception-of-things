@@ -56,7 +56,7 @@ EOF
 
   if ! command -v argocd &>/dev/null; then
     info "Installation de argocd CLI..."
-    curl -sSL -o /usr/local/bin/argocd \
+    sudo curl -sSL -o /usr/local/bin/argocd \
       https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
     chmod +x /usr/local/bin/argocd
   fi
@@ -316,7 +316,6 @@ main() {
 
   GITLAB_ROOT_PASSWORD=$(get_gitlab_password)
   info "Mot de passe root GitLab : ${GITLAB_ROOT_PASSWORD}"
-  info "(Sauvegardez-le pour la soutenance)"
 
   setup_gitlab_repo "${GITLAB_ROOT_PASSWORD}"
   setup_argocd "${GITLAB_ROOT_PASSWORD}"
