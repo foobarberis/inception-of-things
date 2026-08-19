@@ -1,15 +1,13 @@
-# proxy_multi.py
 import http.server
 import urllib.request
 import threading
 
-TARGET = "127.0.0.1:8888"  # le tunnel SSH doit pointer ici
+TARGET = "127.0.0.1:18088"
 
-# port local -> Host header à injecter
 ROUTES = {
     8081: "app1.com",
     8082: "app2.com",
-    8083: None,  # None = pas de header Host particulier (catch-all app3)
+    8083: None,
 }
 
 def make_handler(fake_host):
