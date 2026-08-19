@@ -31,11 +31,12 @@ The **physical host** is the computer running QEMU. The **outer VM** is
 
 ### Physical-host prerequisites
 
-The physical host needs x86-64 KVM access, QEMU, curl, xorriso, and OpenSSH.
-On a Debian-based host, install them with:
+The physical host needs x86-64 KVM access, QEMU, curl, xorriso, OpenSSH, and
+Python 3 for the Part 2 browser proxy. On a Debian-based host, install them
+with:
 
 ```sh
-sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client
+sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client python3
 ```
 
 The host user must be able to read and write `/dev/kvm`.
@@ -52,16 +53,14 @@ SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh
 
 Keep the QEMU console open.
 
-From a second terminal on the physical host, connect to the outer VM with the
-matching private key:
+From a second terminal on the physical host, connect to the outer VM:
 
 ```sh
-ssh -i "$HOME/.ssh/id_ed25519" -p 2222 \
-  -o IdentitiesOnly=yes \
-  -o UserKnownHostsFile=/dev/null \
-  -o StrictHostKeyChecking=no \
-  mbernard@localhost
+./setup/connect-vm.sh
 ```
+
+The script uses `$HOME/.ssh/id_ed25519` by default. Set `SSH_KEY_PATH` to use
+a different private key.
 
 Inside the outer VM, wait for first-boot configuration to finish:
 
@@ -145,25 +144,32 @@ Part 2 uses one nested VM, `mbernardS`, at `192.168.56.110`. It runs a K3s
 server and three web applications. Before starting it, complete Part 1's
 Destroy step.
 
-### Tools and flow
+### Traefik and Ingress
 
-- **Vagrant** describes the nested VM, while **libvirt** creates, runs, and
-  networks it as in Part 1. Together, they provide a reproducible VM
-  environment without manually configuring a hypervisor.
-- **K3s** supplies Kubernetes in that VM. Kubernetes maintains the desired
-  state declared by the Deployments, Services, and Ingress; K3s also includes
-  **Traefik**, the Ingress controller used in this part.
-- A Kubernetes **Deployment** keeps a requested number of application Pods
-  running. App 1 and App 3 have one replica each; App 2 has three.
-- A Kubernetes **Service** gives each set of Pods a stable internal endpoint.
-- A **ConfigMap** stores each application's HTML template.
-- An **Ingress** is a routing rule. Traefik reads `apps-ingress` and sends
-  requests with `Host: app1.com` to App 1 and `Host: app2.com` to App 2. Its
-  catch-all rule sends every other host to App 3.
+Part 2 introduces **Traefik** and **Ingress**, which work together to make
+applications inside Kubernetes reachable through HTTP.
 
-The provisioner installs K3s, waits for Traefik, creates the ConfigMaps, and
-applies the Deployments, Services, and Ingress. Traefik then routes incoming
-HTTP requests to the appropriate Service.
+- **Traefik** is a reverse proxy and Kubernetes Ingress controller. It listens
+  for incoming HTTP requests and sends each request to the appropriate
+  Kubernetes Service.
+- An **Ingress** is a Kubernetes resource that declares HTTP-routing rules,
+  such as matching a hostname or URL path. It does not route traffic itself:
+  Traefik reads the Ingress and enforces its rules.
+
+`ingressClassName: traefik` assigns `apps-ingress` to Traefik. Its `rules`
+list declares the desired routes:
+
+- `Host: app1.com` with any path below `/` goes to `app1-svc`.
+- `Host: app2.com` with any path below `/` goes to `app2-svc`.
+- The rule without a `host` field matches every other host and goes to
+  `app3-svc`.
+
+Each rule uses `path: /` with `pathType: Prefix`, so it matches `/` and every
+path below it. When a request reaches `192.168.56.110:80`, Traefik reads its
+`Host` header and path, selects the most specific matching Ingress rule, and
+forwards the request to that rule's Service. The Service then sends it to one
+of the matching application Pods. In short, the Ingress declares the routes;
+Traefik enforces them.
 
 ### Run
 
@@ -184,6 +190,34 @@ From the same directory, run:
 The validator confirms the K3s node, the three workloads and their replica
 counts, the Ingress, and the responses for App 1, App 2, and the App 3
 catch-all route.
+
+#### Test in a physical-host browser
+
+The physical host cannot directly reach the nested VM's libvirt address. Keep
+the outer VM and Part 2 VM running, then create the tunnel in one
+**physical-host** terminal:
+
+```sh
+./setup/tunnel-p2.sh
+```
+
+The script makes Traefik available locally at `127.0.0.1:18088`. In a second
+physical-host terminal, run the proxy from the repository root:
+
+```sh
+./setup/proxy.py
+```
+
+Open these URLs in a browser on the physical host:
+
+- <http://127.0.0.1:8081/> sends `Host: app1.com` and displays App 1.
+- <http://127.0.0.1:8082/> sends `Host: app2.com` and displays App 2.
+- <http://127.0.0.1:8083/> sends `Host: app3.com`, which matches no named
+  rule and displays the App 3 catch-all route.
+
+Browsers derive the `Host` header from the URL and do not normally allow a
+page to set it manually. The proxy changes the header while forwarding each
+local request to Traefik. Stop the tunnel and proxy with `Ctrl-C` when done.
 
 ### Destroy
 
