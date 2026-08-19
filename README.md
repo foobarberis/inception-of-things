@@ -141,8 +141,7 @@ vagrant destroy -f
 ## Part 2 — K3s and three applications
 
 Part 2 uses one nested VM, `mbernardS`, at `192.168.56.110`. It runs a K3s
-server and three web applications. Before starting it, complete Part 1's
-Destroy step.
+server and three web applications.
 
 ### Traefik and Ingress
 
@@ -227,16 +226,14 @@ From the same directory, run:
 vagrant destroy -f
 ```
 
-Run this command before starting Part 3. It removes the nested VM and its K3s
-cluster.
+**Run this command before starting Part 3. It removes the nested VM and its K3s cluster.**
 
 ## Part 3 — K3d and Argo CD
 
 Part 3 replaces nested VMs with an `iot-p3` K3d cluster running in Docker. The
 cluster has an `argocd` namespace for Argo CD and a `dev` namespace for
 `wil-playground`. Argo CD deploys that application from manifests in a separate
-public GitHub repository. Before starting Part 3, complete Part 2's Destroy
-step.
+public GitHub repository.
 
 ### Docker, K3d, and the deployment flow
 
@@ -327,7 +324,7 @@ From the outer VM, run:
 k3d cluster delete iot-p3
 ```
 
-This removes the Part 3 cluster. Docker remains installed for a later run.
+**This removes the Part 3 cluster. Docker remains installed for a later run.**
 
 ### Test a remote GitOps version change
 
