@@ -48,7 +48,7 @@ your 42 account, as this will allow us to clone the project directly inside the
 `iot-vm` during evaluation.
 
 ```sh
-SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh
+SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./tools/launch-vm.sh
 ```
 
 Keep the QEMU console open.
@@ -56,7 +56,7 @@ Keep the QEMU console open.
 From a second terminal on the physical host, connect to the outer VM:
 
 ```sh
-./setup/connect-vm.sh
+./tools/connect-vm.sh
 ```
 
 The script uses `$HOME/.ssh/id_ed25519` by default. Set `SSH_KEY_PATH` to use
@@ -198,14 +198,14 @@ the outer VM and Part 2 VM running, then create the tunnel in one
 **physical-host** terminal:
 
 ```sh
-./setup/tunnel-p2.sh
+./tools/tunnel-p2.sh
 ```
 
 The script makes Traefik available locally at `127.0.0.1:18088`. In a second
 physical-host terminal, run the proxy from the repository root:
 
 ```sh
-./setup/proxy.py
+./tools/proxy.py
 ```
 
 Open these URLs in a browser on the physical host:

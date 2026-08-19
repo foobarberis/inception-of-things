@@ -50,7 +50,7 @@ fi
 if [[ ! -e "$VM_DIR" ]]; then
     if [[ -z "$SSH_PUBLIC_KEY" ]]; then
         echo "SSH_KEY must contain a public SSH key when creating VM state." >&2
-        echo 'Example: SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh' >&2
+        echo 'Example: SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./tools/launch-vm.sh' >&2
         exit 1
     fi
     if [[ "$SSH_PUBLIC_KEY" == *$'\n'* || "$SSH_PUBLIC_KEY" == *$'\r'* ]]; then
