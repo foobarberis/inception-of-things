@@ -11,323 +11,223 @@
 # REPO_NAME="mbernard-iot"
 # CONFS_DIR="$(cd "$(dirname "$0")/../confs" && pwd)"
 
-set -euo pipefail
+
+
+set -e
 
 k3d cluster delete --all
 
-CLUSTER_NAME="iot-bonus"
 GITLAB_NAMESPACE="gitlab"
 ARGOCD_NAMESPACE="argocd"
 DEV_NAMESPACE="dev"
 GITLAB_DOMAIN="gitlab.local"
-GITLAB_CHART_VERSION="8.1.0"
 REPO_NAME="mbernard-iot"
-CONFS_DIR="$(cd "$(dirname "$0")/../confs" && pwd)"
+CONFS_DIR="$(dirname "$0")/../confs"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()    { echo -e "${GREEN}[INFO]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
+# ---------- Dépendances (identique à p3, + Helm) ----------
 
-install_deps() {
-  info "Vérification des dépendances..."
+if ! command -v docker &>/dev/null; then
+    echo "Execute docker.sh first, then disconnect and reconnect in SSH"
+    exit 1
+fi
 
-  if ! command -v docker &>/dev/null; then
-    info "Installation de Docker..."
-    curl -fsSL https://get.docker.com | sh
-    sudo usermod -aG docker "$USER"
-    newgrp docker <<'EOF'
-EOF
-  fi
+sudo apt-get install -y -qq kubectl
+command -v jq &>/dev/null || sudo apt-get install -y -qq jq
 
-  if ! command -v k3d &>/dev/null; then
-    info "Installation de K3d..."
-    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-  fi
+if ! command -v k3d &>/dev/null; then
+    curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+fi
 
-  if ! command -v kubectl &>/dev/null; then
-    info "Installation de kubectl..."
-    curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-  fi
-
-  if ! command -v helm &>/dev/null; then
-    info "Installation de Helm..."
+if ! command -v helm &>/dev/null; then
     curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-  fi
+fi
 
-  if ! command -v argocd &>/dev/null; then
-    info "Installation de argocd CLI..."
-    sudo curl -sSL -o /usr/local/bin/argocd \
-      https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-    sudo chmod +x /usr/local/bin/argocd
-  fi
+if ! command -v argocd &>/dev/null; then
+    curl -sSL -o /tmp/argocd \
+        https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+    chmod +x /tmp/argocd
+    sudo mv /tmp/argocd /usr/local/bin/argocd
+fi
 
-  command -v git  &>/dev/null || sudo apt-get install -y git
-  command -v curl &>/dev/null || sudo apt-get install -y curl
-  command -v jq   &>/dev/null || sudo apt-get install -y jq
+# ---------- Cluster (identique à p3) ----------
 
-  info "Dépendances OK."
-}
+if ! k3d cluster list | grep -q "iot-bonus"; then
+    k3d cluster create iot-bonus \
+        -p "8888:8888@loadbalancer" \
+        -p "8086:443@loadbalancer" \
+        --wait
+fi
 
-create_cluster() {
-  if k3d cluster list | grep -q "^${CLUSTER_NAME}"; then
-    warn "Cluster '${CLUSTER_NAME}' déjà existant — on le supprime pour repartir propre."
-    k3d cluster delete "${CLUSTER_NAME}"
-  fi
+export KUBECONFIG="$HOME/.kube/config"
+kubectl config use-context k3d-iot-bonus
 
-  info "Création du cluster K3d '${CLUSTER_NAME}'..."
-  k3d cluster create "${CLUSTER_NAME}" \
-    --agents 2 \
-    --k3s-arg "--disable=traefik@server:0" \
-    --k3s-arg "--disable=metrics-server@server:0" \
-    --port "8888:8888@loadbalancer" \
-    --port "80:80@loadbalancer" \
-    --wait
+# ---------- Namespaces ----------
 
-  kubectl config use-context "k3d-${CLUSTER_NAME}"
-  info "Cluster prêt."
-}
+kubectl create namespace "$ARGOCD_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace "$DEV_NAMESPACE"    --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace "$GITLAB_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-create_namespaces() {
-  info "Création des namespaces..."
-  for ns in "${GITLAB_NAMESPACE}" "${ARGOCD_NAMESPACE}" "${DEV_NAMESPACE}"; do
-    kubectl get namespace "${ns}" &>/dev/null \
-      || kubectl create namespace "${ns}"
-  done
-}
+# ---------- Argo CD (identique à p3 — manifest officiel) ----------
 
-install_traefik() {
-  info "Installation de Traefik..."
-  helm repo add traefik https://traefik.github.io/charts
-  helm repo update
+kubectl apply -n "$ARGOCD_NAMESPACE" \
+    -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml || true
 
-  helm upgrade --install traefik traefik/traefik \
-    --namespace kube-system \
-    --set service.type=LoadBalancer \
-    --set ports.web.exposedPort=80 \
-    --wait --timeout 120s
-}
+kubectl wait --for=condition=available \
+    --timeout=300s deployment/argocd-server -n "$ARGOCD_NAMESPACE"
 
-install_argocd() {
-  info "Installation d'Argo CD..."
-  helm repo add argo https://argoproj.github.io/argo-helm
-  helm repo update
+kubectl patch configmap argocd-cmd-params-cm -n "$ARGOCD_NAMESPACE" \
+    --type merge -p '{"data": {"server.insecure": "true"}}'
 
-  helm upgrade --install argocd argo/argo-cd \
-    --namespace "${ARGOCD_NAMESPACE}" \
-    --set server.service.type=LoadBalancer \
-    --set configs.params."server\.insecure"=true \
-    --wait --timeout 180s
+kubectl patch svc argocd-server -n "$ARGOCD_NAMESPACE" \
+    --type merge -p '{"spec":{"type":"ClusterIP"}}'
 
-  info "Argo CD installé."
-}
+kubectl rollout restart deployment argocd-server -n "$ARGOCD_NAMESPACE"
+kubectl rollout status  deployment argocd-server -n "$ARGOCD_NAMESPACE"
 
-install_gitlab() {
-  info "Ajout du repo Helm GitLab..."
-  helm repo add gitlab https://charts.gitlab.io/
-  helm repo update
+# ---------- GitLab via Helm ----------
 
-  info "Installation de GitLab CE (version ${GITLAB_CHART_VERSION})..."
-  info "Cette étape peut prendre 5 à 15 minutes selon les ressources disponibles."
+helm repo add gitlab https://charts.gitlab.io/ 2>/dev/null || helm repo update
+helm repo update
 
-  helm upgrade --install gitlab gitlab/gitlab \
+GITLAB_CHART_VERSION=$(helm search repo gitlab/gitlab --output json \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
+echo "Chart GitLab détecté : ${GITLAB_CHART_VERSION}"
+echo "AppVersion            : $(helm show chart gitlab/gitlab \
+    --version "${GITLAB_CHART_VERSION}" | grep appVersion | awk '{print $2}')"
+
+helm upgrade --install gitlab gitlab/gitlab \
     --version "${GITLAB_CHART_VERSION}" \
     --namespace "${GITLAB_NAMESPACE}" \
     -f "${CONFS_DIR}/gitlab-values.yaml" \
     --timeout 900s \
     --wait
 
-  info "GitLab installé. Attente de la disponibilité du webservice..."
-  kubectl rollout status deployment/gitlab-webservice-default \
+kubectl rollout status deployment/gitlab-webservice-default \
     -n "${GITLAB_NAMESPACE}" --timeout=600s
-}
 
-patch_coredns() {
-  info "Récupération de l'IP du service GitLab webservice..."
+# ---------- DNS : gitlab.local → ClusterIP dans CoreDNS ----------
 
-  local GITLAB_IP=""
-  local retries=30
-  while [[ -z "${GITLAB_IP}" && retries -gt 0 ]]; do
+GITLAB_IP=""
+for i in $(seq 1 30); do
     GITLAB_IP=$(kubectl get svc gitlab-webservice-default \
-      -n "${GITLAB_NAMESPACE}" \
-      -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)
-    [[ -z "${GITLAB_IP}" ]] && sleep 5 && ((retries--))
-  done
+        -n "${GITLAB_NAMESPACE}" \
+        -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)
+    [ -n "${GITLAB_IP}" ] && break
+    sleep 5
+done
+[ -z "${GITLAB_IP}" ] && echo "Impossible de récupérer l'IP GitLab" && exit 1
 
-  [[ -z "${GITLAB_IP}" ]] && error "Impossible de récupérer l'IP du service GitLab."
-  info "IP GitLab webservice : ${GITLAB_IP}"
+# Écrire un ConfigMap CoreDNS propre sans sed multi-ligne fragile
+kubectl get cm coredns -n kube-system -o jsonpath='{.data.Corefile}' > /tmp/Corefile.orig
 
-  info "Patch de CoreDNS pour résoudre ${GITLAB_DOMAIN} → ${GITLAB_IP}..."
-  kubectl get cm coredns -n kube-system -o yaml > /tmp/coredns-backup.yaml
+# Injecter le bloc hosts juste avant la dernière accolade fermante du bloc ".:53"
+python3 - "${GITLAB_IP}" "${GITLAB_DOMAIN}" << 'EOF'
+import sys, re
+ip, domain = sys.argv[1], sys.argv[2]
+content = open('/tmp/Corefile.orig').read()
+hosts_block = f"\n    hosts {{\n      {ip} {domain}\n      fallthrough\n    }}"
+# Insère avant le "}" fermant le bloc .:53
+patched = re.sub(r'(\s+ready\b)', r'\1' + hosts_block, content, count=1)
+open('/tmp/Corefile.patched', 'w').write(patched)
+EOF
 
-  if ! kubectl get cm coredns -n kube-system -o yaml | grep -q "${GITLAB_DOMAIN}"; then
-    kubectl patch cm coredns -n kube-system --type=json \
-      -p="[{
-        \"op\": \"replace\",
-        \"path\": \"/data/Corefile\",
-        \"value\": \"$(kubectl get cm coredns -n kube-system -o jsonpath='{.data.Corefile}' \
-          | sed "s|ready|ready\n    hosts {\n      ${GITLAB_IP} ${GITLAB_DOMAIN}\n      fallthrough\n    }|" \
-          | sed ':a;N;$!ba;s/\n/\\n/g' \
-          | sed 's/\t/\\t/g'
-        )\"
-      }]"
+kubectl create configmap coredns \
+    -n kube-system \
+    --from-file=Corefile=/tmp/Corefile.patched \
+    --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl rollout restart deployment/coredns -n kube-system
-    kubectl rollout status deployment/coredns -n kube-system --timeout=60s
-  else
-    warn "CoreDNS déjà patché pour ${GITLAB_DOMAIN}."
-  fi
+kubectl rollout restart deployment/coredns -n kube-system
+kubectl rollout status  deployment/coredns -n kube-system --timeout=60s
 
-  if ! grep -q "${GITLAB_DOMAIN}" /etc/hosts; then
-    echo "127.0.0.1  ${GITLAB_DOMAIN}" | sudo tee -a /etc/hosts
-    info "/etc/hosts mis à jour."
-  fi
-}
+# /etc/hosts de la VM hôte
+grep -q "${GITLAB_DOMAIN}" /etc/hosts \
+    || echo "127.0.0.1  ${GITLAB_DOMAIN}" | sudo tee -a /etc/hosts
 
-get_gitlab_password() {
-  info "Récupération du mot de passe root GitLab..."
-  local retries=20
-  local GITLAB_ROOT_PASSWORD=""
+# ---------- GitLab : mot de passe root ----------
 
-  while [[ -z "${GITLAB_ROOT_PASSWORD}" && retries -gt 0 ]]; do
+GITLAB_ROOT_PASSWORD=""
+for i in $(seq 1 20); do
     GITLAB_ROOT_PASSWORD=$(kubectl get secret gitlab-gitlab-initial-root-password \
-      -n "${GITLAB_NAMESPACE}" \
-      -o jsonpath='{.data.password}' 2>/dev/null \
-      | base64 -d 2>/dev/null || true)
-    [[ -z "${GITLAB_ROOT_PASSWORD}" ]] && sleep 5 && ((retries--))
-  done
+        -n "${GITLAB_NAMESPACE}" \
+        -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true)
+    [ -n "${GITLAB_ROOT_PASSWORD}" ] && break
+    sleep 5
+done
+[ -z "${GITLAB_ROOT_PASSWORD}" ] && echo "Secret GitLab introuvable" && exit 1
 
-  [[ -z "${GITLAB_ROOT_PASSWORD}" ]] && error "Secret GitLab introuvable."
-  echo "${GITLAB_ROOT_PASSWORD}"
-}
+# ---------- GitLab : créer le projet et pousser les manifests ----------
 
-setup_gitlab_repo() {
-  local PASSWORD="$1"
-  local GITLAB_URL="http://${GITLAB_DOMAIN}"
+GITLAB_URL="http://${GITLAB_DOMAIN}"
 
-  info "Attente que l'API GitLab soit accessible..."
-  local retries=30
-  until curl -sf "${GITLAB_URL}/api/v4/version" -u "root:${PASSWORD}" &>/dev/null; do
-    sleep 10 && ((retries--))
-    [[ retries -eq 0 ]] && error "API GitLab inaccessible après timeout."
-  done
+echo "Attente de l'API GitLab..."
+for i in $(seq 1 30); do
+    curl -sf "${GITLAB_URL}/api/v4/version" -u "root:${GITLAB_ROOT_PASSWORD}" \
+        &>/dev/null && break
+    sleep 10
+done
 
-  local PROJECT_EXISTS
-  PROJECT_EXISTS=$(curl -sf "${GITLAB_URL}/api/v4/projects?search=${REPO_NAME}" \
-    -u "root:${PASSWORD}" | jq length)
+PROJECT_EXISTS=$(curl -sf \
+    "${GITLAB_URL}/api/v4/projects?search=${REPO_NAME}" \
+    -u "root:${GITLAB_ROOT_PASSWORD}" | jq length)
 
-  if [[ "${PROJECT_EXISTS}" -eq 0 ]]; then
-    info "Création du projet '${REPO_NAME}' dans GitLab local..."
+if [ "${PROJECT_EXISTS}" -eq 0 ]; then
     curl -sf -X POST "${GITLAB_URL}/api/v4/projects" \
-      -u "root:${PASSWORD}" \
-      -H "Content-Type: application/json" \
-      -d "{\"name\": \"${REPO_NAME}\", \"visibility\": \"public\", \"initialize_with_readme\": false}" \
-      > /dev/null
-    info "Projet créé."
-  else
-    warn "Projet '${REPO_NAME}' déjà existant dans GitLab."
-  fi
+        -u "root:${GITLAB_ROOT_PASSWORD}" \
+        -H "Content-Type: application/json" \
+        -d "{\"name\": \"${REPO_NAME}\", \"visibility\": \"public\", \
+             \"initialize_with_readme\": false}" > /dev/null
+    echo "Projet ${REPO_NAME} créé dans GitLab."
+fi
 
-  info "Push du deployment.yaml vers le GitLab local..."
-  local TMP_DIR
-  TMP_DIR=$(mktemp -d)
-  cd "${TMP_DIR}"
+TMP_REPO=$(mktemp -d)
+git -C "${TMP_REPO}" init
+git -C "${TMP_REPO}" config user.email "root@gitlab.local"
+git -C "${TMP_REPO}" config user.name "root"
+cp "${CONFS_DIR}/deployment.yaml" "${TMP_REPO}/"
+git -C "${TMP_REPO}" add deployment.yaml
+git -C "${TMP_REPO}" commit -m "Initial deploy — wil42/playground:v1"
+git -C "${TMP_REPO}" remote add origin \
+    "http://root:${GITLAB_ROOT_PASSWORD}@${GITLAB_DOMAIN}/root/${REPO_NAME}.git"
+git -C "${TMP_REPO}" push -u origin master
+rm -rf "${TMP_REPO}"
 
-  git init
-  git config user.email "root@gitlab.local"
-  git config user.name "root"
+# ---------- Argo CD : pointer sur GitLab local (remplace GitHub) ----------
 
-  cp "${CONFS_DIR}/deployment.yaml" .
-  git add deployment.yaml
-  git commit -m "Initial deploy — wil42/playground:v1"
+# Port-forward temporaire pour argocd CLI
+kubectl port-forward svc/argocd-server -n "${ARGOCD_NAMESPACE}" 8080:80 &
+PF_PID=$!
+sleep 3
 
-  git remote add origin \
-    "http://root:${PASSWORD}@${GITLAB_DOMAIN}/root/${REPO_NAME}.git"
-  git push -u origin master
-
-  cd - > /dev/null
-  rm -rf "${TMP_DIR}"
-  info "Manifests poussés."
-}
-
-setup_argocd() {
-  local PASSWORD="$1"
-
-  info "Récupération du mot de passe Argo CD initial..."
-  local ARGOCD_PASSWORD
-  ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret \
+ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret \
     -n "${ARGOCD_NAMESPACE}" \
     -o jsonpath='{.data.password}' | base64 -d)
 
-  info "Login Argo CD..."
-  kubectl port-forward svc/argocd-server -n "${ARGOCD_NAMESPACE}" 8080:443 &>/dev/null &
-  PF_PID=$!
-  sleep 3
-
-  argocd login localhost:8080 \
+argocd login localhost:8080 \
     --username admin \
     --password "${ARGOCD_PASSWORD}" \
     --insecure
 
-  info "Ajout du dépôt GitLab local dans Argo CD..."
-  argocd repo add "http://${GITLAB_DOMAIN}/root/${REPO_NAME}.git" \
+argocd repo add "http://${GITLAB_DOMAIN}/root/${REPO_NAME}.git" \
     --username root \
-    --password "${PASSWORD}" \
+    --password "${GITLAB_ROOT_PASSWORD}" \
     --insecure-skip-server-verification
 
-  info "Déploiement de l'Application Argo CD..."
-  kubectl apply -f "${CONFS_DIR}/argocd-app.yaml"
+kill ${PF_PID} 2>/dev/null || true
 
-  info "Synchronisation manuelle initiale..."
-  argocd app sync playground --timeout 120
+# Appliquer le manifest Argo CD (repoURL pointe sur GitLab local)
+kubectl apply -f "${CONFS_DIR}/argocd.yaml"
 
-  kill ${PF_PID} 2>/dev/null || true
-  info "Argo CD configuré."
-}
+# ---------- Résumé (identique à p3) ----------
 
-verify() {
-  info "=== Vérifications ==="
-  echo ""
-  echo "Namespaces :"
-  kubectl get ns | grep -E "gitlab|argocd|dev"
-  echo ""
-  echo "Pods GitLab :"
-  kubectl get pods -n "${GITLAB_NAMESPACE}" --no-headers | awk '{print $1, $3}'
-  echo ""
-  echo "Pods Argo CD :"
-  kubectl get pods -n "${ARGOCD_NAMESPACE}" --no-headers | awk '{print $1, $3}'
-  echo ""
-  echo "App dans dev :"
-  kubectl get pods -n "${DEV_NAMESPACE}"
-  echo ""
-  info "Test de l'app :"
-  curl -sf http://localhost:8888/ || warn "App pas encore accessible (retry dans quelques secondes)"
-}
-
-main() {
-  info "=== IoT Bonus — Démarrage ==="
-
-  install_deps
-  create_cluster
-  create_namespaces
-  install_traefik
-  install_argocd
-  install_gitlab
-  patch_coredns
-
-  GITLAB_ROOT_PASSWORD=$(get_gitlab_password)
-  info "Mot de passe root GitLab : ${GITLAB_ROOT_PASSWORD}"
-
-  setup_gitlab_repo "${GITLAB_ROOT_PASSWORD}"
-  setup_argocd "${GITLAB_ROOT_PASSWORD}"
-  verify
-
-  echo ""
-  echo "  GitLab   : http://${GITLAB_DOMAIN}  (user: root / pw: ${GITLAB_ROOT_PASSWORD})"
-  echo "  Argo CD  : http://localhost:8080    (user: admin / pw récupéré via secret)"
-  echo "  App dev  : http://localhost:8888"
-  echo ""
-}
-
-main "$@"
+echo ""
+echo "Finished setup"
+echo "App    : curl http://localhost:8888/"
+echo "ArgoCD : https://localhost:8086  (login: admin)"
+echo "GitLab : http://${GITLAB_DOMAIN}  (login: root)"
+echo ""
+echo "Mot de passe ArgoCD :"
+echo "  kubectl get secret argocd-initial-admin-secret \
+-n argocd -o jsonpath='{.data.password}' | base64 -d"
+echo ""
+echo "Mot de passe GitLab root : ${GITLAB_ROOT_PASSWORD}"
+echo ""
