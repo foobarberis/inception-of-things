@@ -84,6 +84,21 @@ kubectl patch svc argocd-server -n "$ARGOCD_NAMESPACE" \
 kubectl rollout restart deployment argocd-server -n "$ARGOCD_NAMESPACE"
 kubectl rollout status  deployment argocd-server -n "$ARGOCD_NAMESPACE"
 
+# Redis
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm upgrade --install gitlab-redis bitnami/redis \
+    --namespace "${GITLAB_NAMESPACE}" \
+    --set auth.enabled=false \
+    --set architecture=standalone \
+    --wait --timeout 180s
+
+# PostgreSQL
+helm upgrade --install gitlab-postgresql bitnami/postgresql \
+    --namespace "${GITLAB_NAMESPACE}" \
+    --set auth.postgresPassword=gitlab \
+    --set auth.database=gitlabhq_production \
+    --wait --timeout 180s
+
 # ---------- GitLab via Helm ----------
 
 helm repo add gitlab https://charts.gitlab.io/ 2>/dev/null || helm repo update
