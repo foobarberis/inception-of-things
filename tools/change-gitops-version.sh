@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GITOPS_DIR="${GITOPS_DIR:-$HOME/mbernard-iot}"
+GITOPS_DIR="${GITOPS_DIR:-$HOME/goinfre/mbernard-iot}"
 REPO_URL="git@github.com:melobern/mbernard-iot.git"
 
 if [[ ! -d "$GITOPS_DIR/.git" ]]; then
