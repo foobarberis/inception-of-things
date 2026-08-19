@@ -13,6 +13,8 @@
 
 set -euo pipefail
 
+k3d cluster delete --all
+
 CLUSTER_NAME="iot-bonus"
 GITLAB_NAMESPACE="gitlab"
 ARGOCD_NAMESPACE="argocd"
