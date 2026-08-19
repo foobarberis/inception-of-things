@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import http.server
 import urllib.request
 import threading
@@ -7,13 +9,13 @@ TARGET = "127.0.0.1:18088"
 ROUTES = {
     8081: "app1.com",
     8082: "app2.com",
-    8083: None,
+    8083: "app3.com",
 }
 
 def make_handler(fake_host):
     class Proxy(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            headers = {"Host": fake_host} if fake_host else {}
+            headers = {"Host": fake_host}
             req = urllib.request.Request(f"http://{TARGET}{self.path}", headers=headers)
             try:
                 with urllib.request.urlopen(req) as resp:
@@ -35,7 +37,7 @@ def make_handler(fake_host):
 
 def serve(port, fake_host):
     server = http.server.HTTPServer(("127.0.0.1", port), make_handler(fake_host))
-    print(f"Proxy actif : http://127.0.0.1:{port} -> Host:{fake_host or '(aucun)'}")
+    print(f"Proxy listening: http://127.0.0.1:{port} -> Host: {fake_host}")
     server.serve_forever()
 
 if __name__ == "__main__":

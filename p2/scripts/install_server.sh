@@ -28,17 +28,16 @@ echo "Waiting for Traefik (Ingress controller) to be ready..."
 until kubectl -n kube-system rollout status deployment/traefik --timeout=10s &>/dev/null; do
   sleep 2
 done
-echo "Deploying application..."
+echo "Creating application ConfigMaps..."
+kubectl create configmap app1-template --from-file=index.html.template=${CONFS}/app1/index.html --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap app2-template --from-file=index.html.template=${CONFS}/app2/index.html --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap app3-template --from-file=index.html.template=${CONFS}/app3/index.html --dry-run=client -o yaml | kubectl apply -f -
 
+echo "Deploying applications..."
 kubectl apply -f ${CONFS}/app1/app1.yaml
 kubectl apply -f ${CONFS}/app2/app2.yaml
 kubectl apply -f ${CONFS}/app3/app3.yaml
 kubectl apply -f ${CONFS}/ingress.yaml
-
-# ConfigMaps
-kubectl create configmap app1-template --from-file=index.html.template=${CONFS}/app1/index.html --dry-run=client -o yaml | kubectl apply -f -
-kubectl create configmap app2-template --from-file=index.html.template=${CONFS}/app2/index.html --dry-run=client -o yaml | kubectl apply -f -
-kubectl create configmap app3-template --from-file=index.html.template=${CONFS}/app3/index.html --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl get pods
 kubectl get ingress
