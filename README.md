@@ -11,8 +11,8 @@
 ## Overview
 
 Inception of Things is a 42 systems administration project about virtual
-machine provisioning, Kubernetes networking, and GitOps. The mandatory parts
-run inside an outer Debian VM named `iot-vm`.
+machine provisioning, Kubernetes networking, and GitOps. The project runs inside
+an outer Debian VM named `iot-vm`.
 
 ```text
 Physical host
@@ -25,8 +25,7 @@ Physical host
 ```
 
 The **physical host** is the computer running QEMU. The **outer VM** is
-`iot-vm`. Parts 1 and 2 create **nested VMs** inside the outer VM. Keeping
-these terms distinct is important, especially for the Part 3 GitOps test.
+`iot-vm`. Parts 1 and 2 create **nested VMs** inside the outer VM.
 
 ## Setup
 
@@ -39,21 +38,18 @@ On a Debian-based host, install them with:
 sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client
 ```
 
-The host user must be able to read and write `/dev/kvm`; the launcher checks
-this before it creates VM state.
+The host user must be able to read and write `/dev/kvm`.
 
 ### Start and access the outer VM
 
 For the first launch, provide the public half of the SSH key registered for
-your account:
+your 42 account, as this will allow us to clone the project directly inside the
+`iot-vm` during evaluation.
 
 ```sh
 SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh
 ```
 
-The launcher downloads a pinned Debian image, creates a 20 GiB copy-on-write
-disk and cloud-init seed in `~/goinfre/iot-vm`, and authorizes the key for
-`mbernard`. Later launches reuse that state and can run without `SSH_KEY`.
 Keep the QEMU console open.
 
 From a second terminal on the physical host, connect to the outer VM with the
@@ -113,14 +109,12 @@ Part 1 creates a two-node K3s cluster. `mbernardS` is the K3s server at
   inspect the cluster, and the validator uses it to confirm that both nodes
   are ready.
 
-Vagrant asks libvirt to create both VMs, then provisions K3s on the server.
-The worker receives the shared token and joins the same cluster.
-
 ### Run
 
-Inside the outer VM, run this from `~/inception-of-things/p1`:
+Inside the outer VM.
 
 ```sh
+cd ~/inception-of-things/p1
 vagrant up
 ```
 
@@ -143,8 +137,7 @@ From the same directory, run:
 vagrant destroy -f
 ```
 
-Run this command before starting Part 2. It removes both nested VMs and frees
-their resources.
+**Run this command before starting Part 2. It removes both nested VMs and frees their resources.**
 
 ## Part 2 — K3s and three applications
 
