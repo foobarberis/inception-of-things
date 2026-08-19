@@ -235,6 +235,31 @@ cluster has an `argocd` namespace for Argo CD and a `dev` namespace for
 `wil-playground`. Argo CD deploys that application from manifests in a separate
 public GitHub repository.
 
+### Namespaces, Pods, and resources
+
+A **namespace** is a logical workspace inside a Kubernetes cluster. It is not a
+VM and does not run containers: it groups resources and scopes their names. In
+this project, `argocd` contains Argo CD resources, while `dev` contains the
+resources for `wil-playground`.
+
+A **Pod** is the smallest unit Kubernetes schedules and runs. It contains one
+or more closely related containers that share a network identity and can share
+storage. Here, the `wil-playground` application runs in a Pod in the `dev`
+namespace. Its Deployment creates and maintains that Pod.
+
+A **resource** is any object Kubernetes tracks through its API. Pods and
+namespaces are both resources. Other examples in this project are:
+
+- A **Deployment**, which declares the desired application Pod and replica
+  count.
+- A **Service**, which gives the application Pods a stable in-cluster endpoint.
+- An **Ingress**, which routes HTTP requests to a Service.
+- An Argo CD **Application**, which lives in `argocd`, identifies the Git
+  repository, and tells Argo CD to deploy its manifests to `dev`.
+
+In short, namespaces organize resources, while Pods run the application
+containers.
+
 ### Docker, K3d, and the deployment flow
 
 Part 3 reuses K3s, `kubectl`, and Traefik from the earlier parts. It
