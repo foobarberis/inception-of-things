@@ -58,7 +58,7 @@ EOF
     info "Installation de argocd CLI..."
     sudo curl -sSL -o /usr/local/bin/argocd \
       https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-    chmod +x /usr/local/bin/argocd
+    sudo chmod +x /usr/local/bin/argocd
   fi
 
   command -v git  &>/dev/null || sudo apt-get install -y git
