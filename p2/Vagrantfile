@@ -6,8 +6,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.synced_folder ".", "/vagrant", type: "nfs", nfs_udp: false, nfs_version: 4
 
-  config.vm.define "mbernardS2" do |server|
-    server.vm.hostname = "mbernardS2"
+  config.vm.define "mbernardS" do |server|
+    server.vm.hostname = "mbernardS"
     server.vm.network "private_network",
       ip: "192.168.56.110",
       libvirt__network_name: "p2_network"

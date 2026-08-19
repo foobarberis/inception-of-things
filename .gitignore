@@ -6,3 +6,4 @@ node-token
 user-data
 debian-mother.qcow2
 seed.iso
+__pycache__
