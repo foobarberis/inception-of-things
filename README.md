@@ -273,11 +273,11 @@ self-healing.
 The deployment flow is:
 
 ```text
-physical host commit and push
-    → GitHub GitOps repository
-    → Argo CD detects and synchronizes the manifests
-    → Deployment in the dev namespace changes
-    → Kubernetes pulls the selected image from Docker Hub
+1. Kubernetes/K3d runs the cluster.
+2. Argo CD runs as Pods in the argocd namespace.
+3. Argo CD watches the GitHub repository.
+4. When it sees the deployment YAML, it asks the Kubernetes API to create/update resources in dev.
+5. Kubernetes creates the Deployment, pulls the Docker Hub image, and runs the app Pod.
 ```
 
 For example, changing `wil42/playground:v1` to `wil42/playground:v2` in the
