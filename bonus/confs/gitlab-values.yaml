@@ -1,5 +1,5 @@
 global:
-  host:
+  hosts:
     domain: gitlab.local
     https: false
     gitlab:
@@ -21,7 +21,7 @@ certmanager-issuer:
   email: gitlab@gitlab.local
 
 certmanager:
-  install: false
+  installCRDs: false
 
 nginx-ingress:
   enabled: false
