@@ -346,6 +346,7 @@ run:
 ```
 
 On its first run, the script clones the separate GitOps repository to
+`~/goinfre/mbernard-iot`. It detects whether `deployment.yaml` uses `v1` or `v2`,
 `~/mbernard-iot`. It detects whether `deployment.yaml` uses `v1` or `v2`,
 toggles the image tag, commits the change, and pushes it to GitHub. Set
 `GITOPS_DIR` to use a different clone location. The script does not modify this
