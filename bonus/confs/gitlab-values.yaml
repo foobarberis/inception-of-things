@@ -1,0 +1,102 @@
+global:
+  host:
+    domain: gitlab.local
+    https: false
+    gitlab:
+      name: gitlab.local
+    ingress:
+      enabled: true
+      class: traefik
+      annotations:
+        traefik.ingress.kubernetes.io/router.entrypoints: web
+      tls:
+        enabled: false
+      edition: ce
+      email:
+        display:
+          name: Gitlab
+          email: gitlab@gitlab.local
+
+  certmanager:
+    install: false
+
+  nginx-ingress:
+    enabled: false
+
+  gitlab-runner:
+    install: false
+
+  prometheus:
+    install: false
+
+  grafana:
+    enabled: false
+
+  postgresql:
+    install: true
+
+  redis:
+    install: true
+
+  minio:
+    install: true
+
+  gitlab:
+    webservice:
+      minReplicas: 1
+      maxReplicas: 1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 1536Mi
+      workhouse:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+
+  sidekiq:
+    minReplicas: 1
+    maxReplicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 250Mi
+
+  gitaly:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  gitlab-shell:
+    minReplicas: 1
+    maxReplicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+  gitlab-exporter:
+    enabled: false
+
+  migrations:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  registry:
+    enabled: false
+
+  shared-secrets:
+    enabled: true
