@@ -17,6 +17,9 @@ global:
           name: Gitlab
           email: gitlab@gitlab.local
 
+  certmanager-issuer:
+    email: gitlab@gitlab.local
+
   certmanager:
     install: false
 
