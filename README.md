@@ -1,115 +1,63 @@
 # Inception of Things
 
-## Table of contents
+## Contents
 
-- [Introduction](#introduction)
-- [Stack Overview](#stack-overview)
+- [Overview](#overview)
 - [Setup](#setup)
-- [Part 1](#part-1)
-- [Part 2](#part-2)
-- [Part 3](#part-3)
+- [Part 1 — K3s and Vagrant](#part-1--k3s-and-vagrant)
+- [Part 2 — K3s and three applications](#part-2--k3s-and-three-applications)
+- [Part 3 — K3d and Argo CD](#part-3--k3d-and-argo-cd)
 
-## Introduction
+## Overview
 
-Inception of Things is a 42 system-administration project about VM
-provisioning, Kubernetes networking, and GitOps. Each part runs in one outer
-Debian VM named `iot-vm`.
-
-- **Part 1** provisions a two-node K3s cluster.
-- **Part 2** deploys three applications and routes them by HTTP `Host` header.
-- **Part 3** deploys an application to K3d through Argo CD GitOps.
-
-## Stack Overview
-
-Think of the project as a set of machines inside machines. QEMU/KVM creates one
-large Debian VM. Parts 1 and 2 create smaller VMs inside it; Part 3 uses Docker
-containers inside it instead.
+Inception of Things is a 42 systems administration project about virtual
+machine provisioning, Kubernetes networking, and GitOps. The mandatory parts
+run inside an outer Debian VM named `iot-vm`.
 
 ```text
 Physical host
-└── QEMU/KVM → outer Debian VM (`iot-vm`)
-    ├── cloud-init prepares the VM on its first boot
-    ├── Parts 1/2: Vagrant/libvirt → nested VMs → K3s
-    │                              └── Part 2: Traefik → app1/app2/app3
+└── QEMU/KVM runs the outer Debian VM (`iot-vm`)
+    ├── cloud-init prepares it on first boot
+    ├── Parts 1 and 2: Vagrant → libvirt nested VMs → K3s
     └── Part 3: Docker → K3d → K3s
-                              ├── Traefik → Argo CD web page
-                              └── Argo CD → application
-
-GitHub repository ──→ Argo CD ──→ application settings in Kubernetes
-Docker Hub image ─────────────────→ Part 3 application
+                         ├── Traefik exposes web endpoints
+                         └── Argo CD reconciles GitHub manifests
 ```
 
-### A few Kubernetes words
-
-Kubernetes is a system for running and keeping containers alive across one or
-more machines, called a cluster. You tell it what you want in a YAML file, such
-as “run three copies of this application,” and it keeps trying to make that
-true. A **Deployment** describes those copies; a **Pod** is one running copy;
-and a **Service** gives the copies one stable internal address.
-
-An **Ingress** is a web-routing rule: it says which Service should receive a
-request for a hostname or URL path. It needs a program to apply the rule.
-Traefik is that program in this project; in Part 2 it sends `app1.com`,
-`app2.com`, and other hosts to the right application.
-
-K3s is the lightweight version of Kubernetes that actually runs the cluster.
-K3d is a helper that runs K3s inside Docker containers. In short: Parts 1 and
-2 run K3s in nested VMs, while Part 3 runs K3s in Docker through K3d.
-
-| Tool | Plain-language role |
-| --- | --- |
-| QEMU/KVM | QEMU creates the outer Debian virtual machine; KVM lets it run quickly using the computer's virtualization support. |
-| cloud-init | A first-start setup file. It creates `mbernard`, installs packages, and grants the permissions needed for nested VMs. |
-| Vagrant | A repeatable recipe and command-line tool for creating the small VMs used in Parts 1 and 2. |
-| libvirt | The VM engine Vagrant asks to create, network, start, and stop those small VMs. |
-| K3s | The small, lightweight Kubernetes installation that runs the applications. |
-| Docker | The container engine used in Part 3; it runs K3d's containers. |
-| K3d | The bridge between Docker and K3s: it creates a K3s cluster from Docker containers. |
-| kubectl | The command-line remote control for asking Kubernetes what is running and changing it. |
-| Traefik | The web front door. It reads Ingress rules and sends browser requests to the right application. |
-| Argo CD | A Git watcher for Part 3. It notices changes in GitHub and updates Kubernetes to match. |
-| GitHub | Stores the Part 3 application settings that Argo CD watches. |
-| Docker Hub | Stores the ready-made Part 3 application images (`wil42/playground:v1` and `v2`). |
+The **physical host** is the computer running QEMU. The **outer VM** is
+`iot-vm`. Parts 1 and 2 create **nested VMs** inside the outer VM. Keeping
+these terms distinct is important, especially for the Part 3 GitOps test.
 
 ## Setup
 
-### Prerequisites (physical host)
+### Physical-host prerequisites
 
-The host needs x86-64 KVM access, QEMU, curl, xorriso, and OpenSSH. On a
-Debian-based host:
+The physical host needs x86-64 KVM access, QEMU, curl, xorriso, and OpenSSH.
+On a Debian-based host, install them with:
 
 ```sh
 sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client
 ```
 
-`/dev/kvm` must be readable and writable by the host user; the launcher checks
+The host user must be able to read and write `/dev/kvm`; the launcher checks
 this before it creates VM state.
 
-### Start the outer VM (physical host)
+### Start and access the outer VM
 
-For a new VM, pass the public half of the personal SSH key registered for your
-account (shown here with the default Ed25519 key):
+For the first launch, provide the public half of the SSH key registered for
+your account:
 
 ```sh
 SSH_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")" ./setup/launch-vm.sh
 ```
 
-The script downloads a pinned Debian image to `~/goinfre`, creates a 20 GB
-copy-on-write disk and cloud-init seed under `~/goinfre/iot-vm`, and authorizes
-that public key for `mbernard`. It never generates or stores a private key.
-Later launches reuse the state and do not need `SSH_KEY`:
+The launcher downloads a pinned Debian image, creates a 20 GiB copy-on-write
+disk and cloud-init seed in `~/goinfre/iot-vm`, and authorizes the key for
+`mbernard`. Later launches reuse that state and can run without `SSH_KEY`.
+Keep the QEMU console open.
 
-```sh
-./setup/launch-vm.sh
-```
-
-The QEMU console stays attached to this terminal. If the VM state was created
-with the previous generated-key setup, remove `~/goinfre/iot-vm` after stopping
-QEMU and create it again with `SSH_KEY`. Cloud-init does not replace the
-existing VM's authorized key.
-
-In a second **physical-host** terminal, connect with the private counterpart
-of `SSH_KEY` (shown here as the default Ed25519 key):
+From a second terminal on the physical host, connect to the outer VM with the
+matching private key:
 
 ```sh
 ssh -i "$HOME/.ssh/id_ed25519" -p 2222 \
@@ -119,340 +67,255 @@ ssh -i "$HOME/.ssh/id_ed25519" -p 2222 \
   mbernard@localhost
 ```
 
-Inside the **outer VM**, wait for first boot to finish:
+Inside the outer VM, wait for first-boot configuration to finish:
 
 ```sh
 cloud-init status --wait
 ```
 
-Cloud-init adds `mbernard` to `kvm` and `libvirt`. If the SSH session was open
-before that completed, reconnect before using Vagrant.
+Cloud-init adds `mbernard` to the `kvm` and `libvirt` groups. Reconnect if the
+SSH session was opened before that step completed.
 
-### Clone the project (outer VM)
+### Clone the project
 
-Clone to the outer VM's local disk; Parts 1 and 2 export this checkout through
-NFS to their nested guests.
+Inside the outer VM, clone the repository to its local disk. Parts 1 and 2
+share this checkout with their nested VMs through NFS.
 
 ```sh
 git clone https://github.com/foobarberis/inception-of-things.git ~/inception-of-things
 ```
 
-### Outer VM lifecycle
+## Part 1 — K3s and Vagrant
 
-| Action | Command | Effect |
-| --- | --- | --- |
-| Graceful stop (**outer VM**) | `sudo poweroff` | Stops the guest and releases its CPU/RAM allocation. |
-| Start or restart (**physical host**) | `./setup/launch-vm.sh` | Reuses the disk and cloud-init state. |
-| Force-stop (**QEMU console**) | `Ctrl-a`, then `x` | Immediately quits QEMU; use only if graceful shutdown is unavailable. |
-| Destroy VM state (**physical host**, after QEMU stops) | `rm -rf "$HOME/goinfre/iot-vm"` | Removes the overlay disk and cloud-init seed. The base image remains cached. |
-| Remove the cached base image too (**physical host**) | `rm -f "$HOME"/goinfre/debian-13-generic-amd64-*.qcow2` | Frees the image cache; the next launch downloads it again. |
+Part 1 creates a two-node K3s cluster. `mbernardS` is the K3s server at
+`192.168.56.110`; `mbernardSW` is the agent at `192.168.56.111`.
 
-Closing SSH only disconnects the client. Halt nested Vagrant guests before
-powering off the outer VM when a graceful shutdown of the whole lab is wanted.
+### Tools and flow
 
-## Part 1
+- **Vagrant** builds and manages reproducible virtual-machine environments
+  from a `Vagrantfile` in a single workflow. Here, it creates the two nested
+  Debian VMs.
+- **libvirt** is the virtualization layer behind Vagrant. Vagrant describes
+  the machines in the `Vagrantfile`; libvirt actually creates and controls
+  their virtual CPUs, memory, disks, private network, and lifecycle through
+  KVM/QEMU. It is needed because Vagrant coordinates VM environments but is
+  not a hypervisor itself.
+- **NFS** shares the Part 1 directory as `/vagrant` in both VMs. The server
+  writes its K3s join token there, and the worker reads it.
+- **Kubernetes** is a container orchestration system. You declare the desired
+  state of applications—for example, which containers should run and how many
+  copies—and it schedules them, networks them, and works to keep that state
+  running.
+- **K3s** is a lightweight Kubernetes distribution suited to this lab. Its
+  server provides the cluster control plane; its agent registers as a worker
+  and runs workloads assigned by the control plane.
+- **kubectl** is Kubernetes' command-line client. The server uses it to
+  inspect the cluster, and the validator uses it to confirm that both nodes
+  are ready.
 
-### Layout
+Vagrant asks libvirt to create both VMs, then provisions K3s on the server.
+The worker receives the shared token and joins the same cluster.
 
-Part 1 uses the `cloud-image/debian-13` box and `p1_network`
-(`192.168.56.0/24`). The outer VM exports `~/inception-of-things/p1` over NFS
-as `/vagrant` in both guests. The server writes its K3s join token to
-`/vagrant/node-token`; the worker reads it from the same share.
+### Run
 
-| Nested VM | K3s role | Private IP | Resources |
-| --- | --- | --- | --- |
-| `mbernardS` | Server, control plane, and `kubectl` | `192.168.56.110` | 1 vCPU, 1024 MiB |
-| `mbernardSW` | Agent (worker) | `192.168.56.111` | 1 vCPU, 512 MiB |
-
-### Provision (outer VM)
+Inside the outer VM, run this from `~/inception-of-things/p1`:
 
 ```sh
-cd ~/inception-of-things/p1
-vagrant up --provider=libvirt
+vagrant up
 ```
 
-The first run downloads the box, creates and NFS-mounts both guests, then
-provisions the server followed by the worker. Later `vagrant up` commands only
-start existing guests.
+### Test
 
-### Validate (outer VM)
-
-The validator resolves its own directory, so it can run from anywhere:
+From the same directory, run:
 
 ```sh
-bash ~/inception-of-things/p1/scripts/validate.sh
-```
-
-It prints Vagrant state, each guest's hostname, private address and K3s service,
-then the node and system-pod lists. After provisioning, expect both guests to
-be running, `k3s`/`k3s-agent` to be active, and two `Ready` nodes:
-`mbernards` and `mbernardsw`. It does not wait for readiness, so run it after
-provisioning completes.
-
-For interactive nested-VM access during a defense, run these from
-`~/inception-of-things/p1` in the **outer VM**:
-
-```sh
-vagrant ssh mbernardS
-vagrant ssh mbernardSW
-```
-
-### Lifecycle and cleanup (outer VM)
-
-Run these from `~/inception-of-things/p1`:
-
-| Action | Command | Effect |
-| --- | --- | --- |
-| Show state | `vagrant status` | Shows both guest states and their provider. |
-| Stop both guests | `vagrant halt` | Gracefully stops the guests while retaining disks and configuration. |
-| Restart halted guests | `vagrant up --provider=libvirt` | Starts existing guests without provisioning again. |
-| Re-run provisioning | `vagrant provision` | Re-runs the installers; use deliberately. |
-| Destroy both guests | `vagrant destroy -f` | Deletes the nested guests and their disks. |
-| Remove a stale join token after destruction | `rm -f node-token` | Clears the ignored shared token before a clean retry. |
-
-For a clean rebuild:
-
-```sh
-vagrant destroy -f
-rm -f node-token
-vagrant up --provider=libvirt
 ./scripts/validate.sh
 ```
 
-Destroying Part 1 frees nested-guest resources. Power off the outer VM as
-[described above](#outer-vm-lifecycle) to release its 8 GiB allocation too.
+The validator checks both VM hostnames and addresses, the K3s server and agent
+services, and the two ready cluster nodes.
 
-## Part 2
+### Destroy
 
-### Layout
-
-Part 2 is independent from Part 1 and uses one libvirt guest on `p2_network`
-(`192.168.56.0/24`). `mbernardS` has 1 vCPU, 2048 MiB, and
-`192.168.56.110`; it runs the K3s server, Traefik, and all three applications.
-The provisioner mounts `p2` at `/vagrant`, creates the application ConfigMaps
-from `confs/app*/index.html`, and applies the deployments, services, and
-Ingress.
-
-| Request `Host` header | Service selected by Traefik | Replicas |
-| --- | --- | --- |
-| `app1.com` | `app1-svc` | 1 |
-| `app2.com` | `app2-svc` | 3 |
-| Any other host | `app3-svc` | 1 |
-
-The hostless Ingress rule is the fallback, so an unmatched host reaches app3.
-
-### Provision (outer VM)
-
-If Part 1 is running, halt it first to free nested-VM resources:
+From the same directory, run:
 
 ```sh
-cd ~/inception-of-things/p1 && vagrant halt
+vagrant destroy -f
 ```
 
-Then provision Part 2:
+Run this command before starting Part 2. It removes both nested VMs and frees
+their resources.
+
+## Part 2 — K3s and three applications
+
+Part 2 uses one nested VM, `mbernardS`, at `192.168.56.110`. It runs a K3s
+server and three web applications. Before starting it, complete Part 1's
+Destroy step.
+
+### Tools and flow
+
+- **Vagrant** describes the nested VM, while **libvirt** creates, runs, and
+  networks it as in Part 1. Together, they provide a reproducible VM
+  environment without manually configuring a hypervisor.
+- **K3s** supplies Kubernetes in that VM. Kubernetes maintains the desired
+  state declared by the Deployments, Services, and Ingress; K3s also includes
+  **Traefik**, the Ingress controller used in this part.
+- A Kubernetes **Deployment** keeps a requested number of application Pods
+  running. App 1 and App 3 have one replica each; App 2 has three.
+- A Kubernetes **Service** gives each set of Pods a stable internal endpoint.
+- A **ConfigMap** stores each application's HTML template.
+- An **Ingress** is a routing rule. Traefik reads `apps-ingress` and sends
+  requests with `Host: app1.com` to App 1 and `Host: app2.com` to App 2. Its
+  catch-all rule sends every other host to App 3.
+
+The provisioner installs K3s, waits for Traefik, creates the ConfigMaps, and
+applies the Deployments, Services, and Ingress. Traefik then routes incoming
+HTTP requests to the appropriate Service.
+
+### Run
+
+Inside the outer VM, run this from `~/inception-of-things/p2`:
 
 ```sh
-cd ~/inception-of-things/p2
-vagrant up --provider=libvirt
+vagrant up
 ```
 
-The first run creates and mounts the guest, installs K3s, waits for Traefik,
-and deploys the applications. Later `vagrant up` commands only start it.
+### Test
 
-### Validate (outer VM)
+From the same directory, run:
 
 ```sh
-bash ~/inception-of-things/p2/scripts/validate.sh
+./scripts/validate.sh
 ```
 
-The validator prints the VM, node, workload, and Ingress details, then requests
-all three routes. Expect one `Ready` node, app1 and app3 at `1/1`, app2 at
-`3/3`, and these markers; the route requests fail the script if a marker is
-missing:
+The validator confirms the K3s node, the three workloads and their replica
+counts, the Ingress, and the responses for App 1, App 2, and the App 3
+catch-all route.
 
-```text
-Hello from app1.
-Hello from app2.
-Hello from app3.
-```
+### Destroy
 
-For a focused ingress inspection during a defense or while troubleshooting,
-run this in the **outer VM**:
+From the same directory, run:
 
 ```sh
-cd ~/inception-of-things/p2
-vagrant ssh mbernardS -c 'kubectl describe ingress apps-ingress'
+vagrant destroy -f
 ```
 
-### Browser access (physical host)
+Run this command before starting Part 3. It removes the nested VM and its K3s
+cluster.
 
-The physical host cannot directly reach the nested libvirt address. Keep the
-outer VM and Part 2 guest running, then use two **physical-host** terminals.
-The first tunnel reaches Traefik through the outer VM; `18088` avoids QEMU's
-existing host mapping for port `8888`.
+## Part 3 — K3d and Argo CD
 
-```sh
-ssh -4 -N -o ExitOnForwardFailure=yes \
-  -L 127.0.0.1:18088:192.168.56.110:80 \
-  -p 2222 \
-  -i "$HOME/.ssh/id_ed25519" \
-  -o IdentitiesOnly=yes \
-  -o UserKnownHostsFile=/dev/null \
-  -o StrictHostKeyChecking=no \
-  mbernard@localhost
-```
+Part 3 replaces nested VMs with an `iot-p3` K3d cluster running in Docker. It
+creates the `argocd` and `dev` namespaces, then deploys `wil-playground` to
+`dev` from a separate public GitHub repository. Before starting it, complete
+Part 2's Destroy step.
 
-In the second terminal, from this repository's root, start the local
-header-injecting proxy:
+### Tools and flow
 
-```sh
-python3 p2/scripts/proxy.py
-```
+- **Docker** runs containers on the outer VM. In this part, those containers
+  become the K3d cluster nodes.
+- **K3d** creates a K3s cluster inside Docker. K3s provides Kubernetes—the
+  control plane and worker-node functions that keep declared cluster resources
+  running—without creating additional VMs.
+- **kubectl** manages and inspects the K3d cluster.
+- **Traefik** is the cluster's web entry point. It exposes the application and
+  the Argo CD web interface through ports forwarded by QEMU to the physical
+  host.
+- **Argo CD** is a GitOps continuous-delivery controller. Its `Application`
+  resource observes the GitHub repository and reconciles the cluster so that
+  the `dev` namespace matches the Kubernetes manifests stored there.
+- **GitHub** stores the desired deployment manifest. Updating its image tag is
+  the remote change that Argo CD synchronizes.
+- **Docker Hub** stores the application's versioned images:
+  `wil42/playground:v1` and `wil42/playground:v2`.
 
-| Browser URL | Injected `Host` header | Expected application |
-| --- | --- | --- |
-| <http://127.0.0.1:8081/> | `app1.com` | app1 |
-| <http://127.0.0.1:8082/> | `app2.com` | app2 |
-| <http://127.0.0.1:8083/> | fallback | app3 |
+The `Application` tracks `https://github.com/melobern/mbernard-iot` at `HEAD`.
+Argo CD applies its root-level manifests to `dev`; Kubernetes then pulls the
+image named by the manifest from Docker Hub. The initial manifest uses `v1`.
 
-The tunnel and proxy bind only to loopback. Stop each with `Ctrl-C` when done.
+### One-time Docker prerequisite
 
-### Lifecycle and cleanup (outer VM)
-
-Run these from `~/inception-of-things/p2`:
-
-| Action | Command | Effect |
-| --- | --- | --- |
-| Show state | `vagrant status` | Shows the guest state and provider. |
-| Stop | `vagrant halt` | Gracefully stops the nested VM. |
-| Restart | `vagrant up --provider=libvirt` | Starts the existing VM without provisioning again. |
-| Re-provision | `vagrant provision` | Runs the K3s and application installer again. |
-| Clean rebuild | `vagrant destroy -f && vagrant up --provider=libvirt` | Recreates the VM and cluster. |
-
-## Part 3
-
-### GitOps layout
-
-Part 3 replaces the nested Vagrant guests with the `iot-p3` K3d cluster inside
-Docker. `p3/confs/argocd.yaml` creates the `wil-playground` Argo CD
-`Application`: it tracks `https://github.com/melobern/mbernard-iot` at `HEAD`,
-applies its root-level manifests to `dev`, and enables automated sync, pruning,
-and self-healing. The initial workload image is `wil42/playground:v1`; the
-GitOps update changes it to `v2`.
-
-The installer maps outer-VM port `8888` to K3d's load balancer on `8888` and
-outer-VM port `8086` to its port `443`. QEMU forwards physical-host ports
-`8888` and `8086` to the matching outer-VM ports, so the application and Argo
-CD are available at the URLs below.
-
-### Install (outer VM)
-
-Part 3 does not use Vagrant. If either earlier part is running, halt it first:
+Docker must be installed once in the outer VM before starting Part 3. From the
+project root, run:
 
 ```sh
-cd ~/inception-of-things/p1 && vagrant halt
-cd ~/inception-of-things/p2 && vagrant halt
-```
-
-Install Docker as the normal VM user. Do **not** run this script through
-`sudo`: it adds the current user to the `docker` group.
-
-```sh
-cd ~/inception-of-things
 ./p3/scripts/docker.sh
 ```
 
-Disconnect and reconnect to the outer VM so the new group membership applies.
-Then confirm Docker works without `sudo` and install the cluster and Argo CD:
+Disconnect and reconnect to the outer VM after this command so the new Docker
+group membership applies.
+
+### Run
+
+Inside the outer VM, run this from the project root:
 
 ```sh
-cd ~/inception-of-things
-docker run --rm hello-world
 ./p3/scripts/install.sh
 ```
 
-The installer installs `kubectl` and K3d when needed, creates `iot-p3` if it
-does not exist, creates `argocd` and `dev`, installs Argo CD, and applies the
-Application and Argo CD Ingress. Downloading images and waiting for the Argo CD
-server can take up to five minutes.
+The installer installs `kubectl` and K3d when needed, creates the cluster,
+installs Argo CD, and applies the Argo CD `Application` and Ingress.
 
-### Validate (outer VM)
+### Test
 
-```sh
-bash ~/inception-of-things/p3/scripts/validate.sh
-```
-
-The validator exports the K3d kubeconfig, lists namespaces, waits up to five
-minutes for `wil-playground` to become `Synced`, then displays the Application
-and `dev` pods and queries the application endpoint. Expected output includes a
-`Synced`/`Healthy` application, one running pod, and:
-
-```json
-{"status":"ok", "message": "v1"}
-```
-
-For a cluster-level defense check not included in the validator, run in the
-**outer VM**:
+From the project root in the outer VM, run:
 
 ```sh
-export KUBECONFIG="$HOME/.kube/config"
-kubectl get nodes -o wide
+./p3/scripts/validate.sh
 ```
 
-### Access Argo CD (physical host)
+The validator waits for Argo CD to synchronize, displays the required
+namespaces and application Pod, and checks that the application returns the
+initial `v1` response.
 
-Retrieve the generated initial password in the **outer VM**:
+### Destroy
+
+From the outer VM, run:
 
 ```sh
-kubectl get secret argocd-initial-admin-secret -n argocd \
-  -o jsonpath='{.data.password}' | base64 -d; echo
+k3d cluster delete iot-p3
 ```
 
-On the **physical host**, open <https://localhost:8086> and log in as `admin`
-with that password. A certificate warning is expected because Traefik uses its
-default certificate. The application is available at
-<http://localhost:8888/>.
+This removes the Part 3 cluster. Docker remains installed for a later run.
 
-### Test the GitOps version change
+### Demonstrate a remote GitOps version change
 
-This modifies the separate GitOps repository, not this project checkout. In the
-**outer VM** (or another machine with an identity authorized to push to
-`melobern/mbernard-iot`):
+Do this test on the **physical host**, not in the outer VM. The physical host
+pushes a change to GitHub; Argo CD in the outer VM then fetches that remote
+change and reconciles the cluster. This demonstrates that the update does not
+come from a local manifest change inside the cluster.
+
+The physical host needs GitHub credentials authorized to push to
+`melobern/mbernard-iot`. The following commands modify that separate GitOps
+repository, not this project checkout:
 
 ```sh
-cd ~
-git clone https://github.com/melobern/mbernard-iot.git p3-gitops
+git clone https://github.com/melobern/mbernard-iot.git ~/p3-gitops
 cd ~/p3-gitops
 grep -F 'wil42/playground:v1' deployment.yaml
 sed -i 's/wil42\/playground:v1/wil42\/playground:v2/g' deployment.yaml
 git add deployment.yaml
 git commit -m 'Deploy playground v2'
-git push origin main
+git push
 ```
 
-Automated sync normally applies the revision shortly afterward. If it does not,
-refresh the Application and use **Sync** in the Argo CD UI. Then verify the new
-image and response in the **outer VM**:
+On the physical host, open <https://localhost:8086> to watch the Argo CD
+application synchronize. Sign in as `admin` with the initial password obtained
+from the command printed by the installer. If automated synchronization has
+not happened yet, use **Refresh** and then **Sync** in the Argo CD interface.
+
+Finally, still on the physical host, verify the externally reachable
+application:
 
 ```sh
-kubectl get deployment wil-playground -n dev \
-  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
-kubectl rollout status deployment/wil-playground -n dev --timeout=180s
 curl -sS http://localhost:8888/
 ```
 
-The image should be `wil42/playground:v2` and the endpoint should return:
+It should return:
 
 ```json
 {"status":"ok", "message": "v2"}
 ```
 
-### Lifecycle and cleanup (outer VM)
-
-| Action | Command | Effect |
-| --- | --- | --- |
-| Show state | `k3d cluster list` | Lists `iot-p3` and its state. |
-| Stop | `k3d cluster stop iot-p3` | Stops Docker containers while retaining cluster state. |
-| Restart | `k3d cluster start iot-p3` | Starts a stopped cluster. |
-| Re-apply setup | `~/inception-of-things/p3/scripts/install.sh` | Reapplies namespaces, Argo CD configuration, and the Application to a running cluster. |
-| Clean rebuild | `k3d cluster delete iot-p3 && ~/inception-of-things/p3/scripts/install.sh` | Deletes and recreates the K3d cluster; Docker remains installed. |
+Return the GitOps manifest to `v1` after the demonstration if you need the
+initial Part 3 test to remain reproducible.
