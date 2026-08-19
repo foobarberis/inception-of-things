@@ -31,12 +31,12 @@ The **physical host** is the computer running QEMU. The **outer VM** is
 
 ### Physical-host prerequisites
 
-The physical host needs x86-64 KVM access, QEMU, curl, xorriso, OpenSSH, and
-Python 3 for the Part 2 browser proxy. On a Debian-based host, install them
+The physical host needs x86-64 KVM access, QEMU, curl, xorriso, OpenSSH, Git,
+and Python 3 for the Part 2 browser proxy. On a Debian-based host, install them
 with:
 
 ```sh
-sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client python3
+sudo apt install qemu-system-x86 qemu-utils curl xorriso openssh-client git python3
 ```
 
 The host user must be able to read and write `/dev/kvm`.
@@ -232,33 +232,58 @@ cluster.
 
 ## Part 3 — K3d and Argo CD
 
-Part 3 replaces nested VMs with an `iot-p3` K3d cluster running in Docker. It
-creates the `argocd` and `dev` namespaces, then deploys `wil-playground` to
-`dev` from a separate public GitHub repository. Before starting it, complete
-Part 2's Destroy step.
+Part 3 replaces nested VMs with an `iot-p3` K3d cluster running in Docker. The
+cluster has an `argocd` namespace for Argo CD and a `dev` namespace for
+`wil-playground`. Argo CD deploys that application from manifests in a separate
+public GitHub repository. Before starting Part 3, complete Part 2's Destroy
+step.
 
-### Tools and flow
+### Docker, K3d, and the deployment flow
 
-- **Docker** runs containers on the outer VM. In this part, those containers
-  become the K3d cluster nodes.
-- **K3d** creates a K3s cluster inside Docker. K3s provides Kubernetes—the
-  control plane and worker-node functions that keep declared cluster resources
-  running—without creating additional VMs.
-- **kubectl** manages and inspects the K3d cluster.
-- **Traefik** is the cluster's web entry point. It exposes the application and
-  the Argo CD web interface through ports forwarded by QEMU to the physical
-  host.
-- **Argo CD** is a GitOps continuous-delivery controller. Its `Application`
-  resource observes the GitHub repository and reconciles the cluster so that
-  the `dev` namespace matches the Kubernetes manifests stored there.
-- **GitHub** stores the desired deployment manifest. Updating its image tag is
-  the remote change that Argo CD synchronizes.
-- **Docker Hub** stores the application's versioned images:
+Part 3 reuses K3s, `kubectl`, and Traefik from the earlier parts. It
+introduces the following tools:
+
+- **Docker** runs containers on the outer VM. In this part, the K3d cluster
+  nodes are Docker containers.
+- **K3d** creates and manages the K3s cluster inside Docker, avoiding the need
+  for additional VMs.
+- **GitHub** stores the Kubernetes manifests that describe the desired
+  application deployment.
+- **Docker Hub** stores the versioned application images:
   `wil42/playground:v1` and `wil42/playground:v2`.
 
-The `Application` tracks `https://github.com/melobern/mbernard-iot` at `HEAD`.
-Argo CD applies its root-level manifests to `dev`; Kubernetes then pulls the
-image named by the manifest from Docker Hub. The initial manifest uses `v1`.
+Traefik, introduced in Part 2, exposes the application and the Argo CD web
+interface through ports forwarded by QEMU to the physical host.
+
+### GitOps and Argo CD
+
+**GitOps** is a deployment approach in which a Git repository is the source of
+truth for the desired state of a system. Instead of changing the cluster
+manually, a change is committed and pushed to Git. A controller then compares
+the running cluster with the repository and reconciles the cluster to match the
+committed manifests. Git history provides an auditable record of deployment
+changes and makes rollback a Git change as well.
+
+**Argo CD** is that GitOps controller in this project. It runs in the `argocd`
+namespace. The `Application` in `p3/confs/argocd.yaml` tracks
+<https://github.com/melobern/mbernard-iot> at `HEAD`, applies its root-level
+manifests to `dev`, and enables automated synchronization, pruning, and
+self-healing.
+
+The deployment flow is:
+
+```text
+physical host commit and push
+    → GitHub GitOps repository
+    → Argo CD detects and synchronizes the manifests
+    → Deployment in the dev namespace changes
+    → Kubernetes pulls the selected image from Docker Hub
+```
+
+For example, changing `wil42/playground:v1` to `wil42/playground:v2` in the
+GitHub manifest makes `v2` the desired state. Argo CD applies that change to
+the cluster. Direct manual changes to this workload can be reverted by Argo
+CD's self-healing; deployment changes should therefore be made through Git.
 
 ### One-time Docker prerequisite
 
@@ -280,8 +305,9 @@ Inside the outer VM, run this from the project root:
 ./p3/scripts/install.sh
 ```
 
-The installer installs `kubectl` and K3d when needed, creates the cluster,
-installs Argo CD, and applies the Argo CD `Application` and Ingress.
+The installer installs `kubectl` and K3d when needed, creates the cluster and
+namespaces, installs Argo CD, and applies the `Application` and Argo CD
+Ingress.
 
 ### Test
 
@@ -291,9 +317,9 @@ From the project root in the outer VM, run:
 ./p3/scripts/validate.sh
 ```
 
-The validator waits for Argo CD to synchronize, displays the required
-namespaces and application Pod, and checks that the application returns the
-initial `v1` response.
+The validator waits for Argo CD to synchronize, lists the required namespaces
+and the application Pod in `dev`, and queries the application's initial `v1`
+response.
 
 ### Destroy
 
@@ -305,31 +331,31 @@ k3d cluster delete iot-p3
 
 This removes the Part 3 cluster. Docker remains installed for a later run.
 
-### Demonstrate a remote GitOps version change
+### Test a remote GitOps version change
 
-Do this test on the **physical host**, not in the outer VM. The physical host
-pushes a change to GitHub; Argo CD in the outer VM then fetches that remote
-change and reconciles the cluster. This demonstrates that the update does not
-come from a local manifest change inside the cluster.
+Do this test on the **physical host**, never in the outer VM. It proves that
+Argo CD obtains the version change from the remote GitHub repository rather
+than from a local change in the cluster or this project checkout.
 
-The physical host needs GitHub credentials authorized to push to
-`melobern/mbernard-iot`. The following commands modify that separate GitOps
-repository, not this project checkout:
+The physical host needs Git and a GitHub SSH key authorized to push to
+`melobern/mbernard-iot`. From the root of this repository on the physical host,
+run:
 
 ```sh
-git clone https://github.com/melobern/mbernard-iot.git ~/p3-gitops
-cd ~/p3-gitops
-grep -F 'wil42/playground:v1' deployment.yaml
-sed -i 's/wil42\/playground:v1/wil42\/playground:v2/g' deployment.yaml
-git add deployment.yaml
-git commit -m 'Deploy playground v2'
-git push
+./tools/change-gitops-version.sh
 ```
 
-On the physical host, open <https://localhost:8086> to watch the Argo CD
-application synchronize. Sign in as `admin` with the initial password obtained
-from the command printed by the installer. If automated synchronization has
-not happened yet, use **Refresh** and then **Sync** in the Argo CD interface.
+On its first run, the script clones the separate GitOps repository to
+`~/mbernard-iot`. It detects whether `deployment.yaml` uses `v1` or `v2`,
+toggles the image tag, commits the change, and pushes it to GitHub. Set
+`GITOPS_DIR` to use a different clone location. The script does not modify this
+project checkout or apply anything directly to the cluster.
+
+On the physical host, open <https://localhost:8086> to watch Argo CD
+synchronize the new Git revision. Sign in as `admin` with the initial password
+obtained from the command printed by the installer. If automated
+synchronization has not happened yet, use **Refresh** and then **Sync** in the
+Argo CD interface.
 
 Finally, still on the physical host, verify the externally reachable
 application:
@@ -338,11 +364,12 @@ application:
 curl -sS http://localhost:8888/
 ```
 
-It should return:
+The response must contain the version selected by the script. From the normal
+initial `v1` state, the first run selects `v2` and returns:
 
 ```json
 {"status":"ok", "message": "v2"}
 ```
 
-Return the GitOps manifest to `v1` after the demonstration if you need the
-initial Part 3 test to remain reproducible.
+A second run toggles the manifest back to `v1`, which restores the initial
+state for another demonstration.
